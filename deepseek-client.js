@@ -1,5 +1,5 @@
-// DeepSeek API Client
-// Two API calls: classify → (structure + dedup combined)
+// DeepSeek API Client v3
+// Minimal prompts, plain text output, manual parsing
 
 const DEEPSEEK_API_BASE = 'https://api.deepseek.com';
 const DEFAULT_MODEL = 'deepseek-chat';
@@ -9,13 +9,11 @@ async function getApiKey() {
   return result.deepseek_api_key || '';
 }
 
-async function callDeepSeek(systemPrompt, userPrompt, { temperature = 0.3, maxTokens = 2000 } = {}) {
+async function chat(messages, { temperature = 0.3, maxTokens = 2000 } = {}) {
   const apiKey = await getApiKey();
-  if (!apiKey) {
-    throw new Error('DeepSeek API Key 未配置，请在扩展设置中配置。');
-  }
+  if (!apiKey) throw new Error('DeepSeek API Key 未配置。');
 
-  const response = await fetch(`${DEEPSEEK_API_BASE}/v1/chat/completions`, {
+  const resp = await fetch(`${DEEPSEEK_API_BASE}/v1/chat/completions`, {
     method: 'POST',
     headers: {
       'Content-Type': 'application/json',
@@ -23,87 +21,80 @@ async function callDeepSeek(systemPrompt, userPrompt, { temperature = 0.3, maxTo
     },
     body: JSON.stringify({
       model: DEFAULT_MODEL,
-      messages: [
-        { role: 'system', content: systemPrompt },
-        { role: 'user', content: userPrompt }
-      ],
+      messages,
       temperature,
-      max_tokens: maxTokens,
-      response_format: { type: 'json_object' }
+      max_tokens: maxTokens
     })
   });
 
-  if (!response.ok) {
-    const err = await response.text();
-    throw new Error(`DeepSeek API 错误 (${response.status}): ${err}`);
+  if (!resp.ok) {
+    const err = await resp.text();
+    throw new Error(`API 错误 (${resp.status}): ${err}`);
   }
 
-  const data = await response.json();
-  const content = data.choices[0].message.content.trim();
-  const jsonStr = content.replace(/^```json\s*/i, '').replace(/^```\s*/i, '').replace(/\s*```$/i, '').trim();
-
-  try {
-    return JSON.parse(jsonStr);
-  } catch (e) {
-    throw new Error(`JSON 解析失败: ${e.message}\n原始返回: ${content.substring(0, 500)}`);
-  }
+  const data = await resp.json();
+  return data.choices[0].message.content.trim();
 }
 
-// ── Step 1: Classify → is this learning content? what's the topic hierarchy? ──
+// ── Call 1: Classify ──
 
 async function classifyConversation(conversation) {
-  const userQuestions = conversation.filter(m => m.role === 'user').map(m => m.content).join('\n---\n');
-  const aiAnswers = conversation.filter(m => m.role === 'assistant').map(m => m.content).join('\n---\n');
+  const text = conversation.map(m => `[${m.role === 'user' ? '问' : '答'}] ${m.content}`).join('\n\n');
 
-  const systemPrompt = '你是一个知识分类专家。只返回JSON，不含解释。';
+  const content = await chat([
+    { role: 'system', content: '你是知识分类器。只输出JSON，无解释。' },
+    { role: 'user', content: `判断是否为学习内容（编程/数学/科学/学术等），是则给出2-4级分类层级。
 
-  const userPrompt = `判断这段对话是否属于学习/知识获取类（编程、数学、科学、学术、技能等）。如果是，请归类到2-4级知识层级。
+${text.substring(0, 3000)}
 
-=== 用户问题 ===
-${userQuestions.substring(0, 2000)}
+输出JSON: {"is_learning":true,"hierarchy":["大类","子类","主题"],"keywords":["k1"]}` }
+  ], { temperature: 0.1, maxTokens: 800 });
 
-=== AI回答摘要 ===
-${aiAnswers.substring(0, 1000)}
-
-返回JSON：
-{
-  "is_learning": true,
-  "hierarchy": ["一级类", "二级类", "三级主题"],
-  "keywords": ["关键词"]
-}`;
-
-  return callDeepSeek(systemPrompt, userPrompt, { temperature: 0.2, maxTokens: 1000 });
+  try {
+    const json = JSON.parse(content.replace(/```json|```/g, '').trim());
+    return json;
+  } catch (e) {
+    throw new Error('分类JSON解析失败: ' + content.slice(0, 200));
+  }
 }
 
-// ── Step 2: Extract knowledge from AI response (structure + dedup in one call) ──
+// ── Call 2: Extract knowledge ──
 
-async function extractKnowledge(aiResponse, existingSectionContent, sourceUrl) {
-  // Trim the AI response to avoid token waste
-  const contentToExtract = aiResponse.substring(0, 8000);
+async function extractKnowledge(aiResponse, existingContent, sourceUrl) {
+  const response = await chat([
+    { role: 'system', content: '你是知识提取器。从AI回答中逐条提取知识点，每条一行。只输出知识点本身，不要任何解释、不要标题、不要点评。如果与已有知识重复就跳过。' },
+    { role: 'user', content: `【已有知识】
+${existingContent.slice(0, 1500)}
 
-  const systemPrompt =
-    '你是知识提取器。输入一段AI教程回答，你从原文中提取知识点，输出为JSON。' +
-    '每条content必须是原文中实际出现的知识点，用原文的语言表述。' +
-    '禁止输出方法论文本（如"提炼"、"拆解"、"结构化"等元描述），只输出知识本身。';
+【AI回答原文】
+${aiResponse.slice(0, 6000)}
 
-  const userPrompt =
-`【已有知识】（用于去重）
-${existingSectionContent.substring(0, 2000)}
+逐条列出原文中出现的新知识点（每条一行，-"开头）：` }
+  ], { temperature: 0.1, maxTokens: 2500 });
 
-【原文内容】
-${contentToExtract}
+  console.log('[知识树] API原始返回:\n', response);
 
-【任务】
-从【原文内容】中逐段提取知识点。每条1-2句，保留关键概念、代码、公式。
-只提取【原文内容】中实际出现的知识，不要凭空编造。
-如果与【已有知识】重复，跳过该条。
+  // Parse bullet-list response into sections
+  const lines = response.split('\n').filter(line => {
+    const t = line.trim();
+    return t.startsWith('-') || t.startsWith('•') || t.match(/^\d+[\.\)]/);
+  });
 
-返回JSON：
-{
-  "sections": [
-    {"heading": "知识点标题(≤15字)", "level": 3, "content": "原文中的具体知识点内容"}
-  ]
-}`;
+  const sections = lines.map(line => {
+    const cleaned = line.replace(/^[-•\d]+[\.\)]\s*/, '').trim();
+    return {
+      heading: cleaned.slice(0, 20),
+      level: 4,
+      content: cleaned
+    };
+  }).filter(s => {
+    const c = s.content;
+    // Aggressive filter: reject anything that looks like meta-instruction
+    if (c.length < 10) return false;
+    if (/拆解|提炼|提取.*知识|结构化|层级.*标题|知识点.*包含|返回.*JSON|输出.*格式|以下.*内容|上述.*原文|上述.*回答/i.test(c)) return false;
+    return true;
+  });
 
-  return callDeepSeek(systemPrompt, userPrompt, { temperature: 0.2, maxTokens: 3000 });
+  console.log('[知识树] 解析后sections:', sections.length, '条');
+  return { sections };
 }
