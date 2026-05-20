@@ -1,9 +1,7 @@
 // AI Knowledge Tree — Background Service Worker
-// Orchestrates capture → classify → structure → dedup → store
+// Orchestrates capture → classify → extract (structure+dedup) → store
 
 importScripts('deepseek-client.js', 'knowledge-tree.js');
-
-const PROCESSING_LOCK = new Set(); // Prevent concurrent processing of same conversation
 
 chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
   if (msg.type === 'CAPTURE_CONVERSATION') {
@@ -12,7 +10,7 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
     }).catch(err => {
       sendResponse({ error: err.message });
     });
-    return true; // Keep channel open for async response
+    return true;
   }
 
   if (msg.type === 'GET_TREE') {
@@ -38,16 +36,14 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
   }
 });
 
+// ── Core capture pipeline ──
+
 async function handleCapture(payload) {
-  const { url, title, messages, newMessages } = payload;
+  const { url, title, messages } = payload;
 
-  // Build conversation context
-  const conversation = messages.map(m => ({
-    role: m.role,
-    content: m.content
-  }));
+  const conversation = messages.map(m => ({ role: m.role, content: m.content }));
 
-  // Step 1: Classify — is this learning content?
+  // Step 1: Classify
   let classification;
   try {
     classification = await classifyConversation(conversation);
@@ -64,66 +60,62 @@ async function handleCapture(payload) {
     return { status: 'skipped', reason: '无法确定知识层级' };
   }
 
-  // Step 2: Structure — break AI response into knowledge points
-  const aiMessages = conversation.filter(m => m.role === 'assistant');
-  const aiContent = aiMessages.map(m => m.content).join('\n\n');
+  // Step 2: Extract knowledge (structure + dedup in one API call)
+  const aiContent = conversation
+    .filter(m => m.role === 'assistant')
+    .map(m => m.content)
+    .join('\n\n');
 
-  let structured;
-  try {
-    structured = await structureContent(aiContent);
-  } catch (err) {
-    return { status: 'error', step: 'structure', error: err.message };
-  }
-
-  if (!structured.sections || structured.sections.length === 0) {
-    return { status: 'skipped', reason: '未能提取到结构化知识点' };
-  }
-
-  // Step 3: Dedup — compare with existing content in the matching section
   const currentTree = await getTree();
   const section = findSection(currentTree, hierarchy);
-  const existingContent = section ? section.content : '(空章节)';
+  const existingContent = section ? section.content : '(空)';
 
-  let dedupResult;
+  let result;
   try {
-    dedupResult = await dedupContent(existingContent, structured.sections);
+    result = await extractKnowledge(aiContent, existingContent, url);
   } catch (err) {
-    // If dedup fails, treat all as new (fail open for knowledge capture)
-    dedupResult = { is_duplicate: false, new_sections: structured.sections };
+    return { status: 'error', step: 'extract', error: err.message };
   }
 
-  if (dedupResult.is_duplicate) {
-    return {
-      status: 'skipped',
-      reason: `已存在相同知识: ${dedupResult.reason || '无新内容'}`,
-      hierarchy
-    };
-  }
-
-  if (!dedupResult.new_sections || dedupResult.new_sections.length === 0) {
+  if (!result.sections || result.sections.length === 0) {
     return { status: 'skipped', reason: '无新增知识点', hierarchy };
   }
 
-  // Step 4: Append new knowledge to tree (content + link combined)
+  // Validate: reject if API returned our prompt instructions instead of real knowledge
+  const validSections = result.sections.filter(s => {
+    const c = s.content || '';
+    // Reject prompt-like content
+    if (/拆解|提炼出|层级化|结构化方法|知识结构拆解|知识点包含标题|返回JSON/i.test(c)) return false;
+    // Reject too-short or placeholder content
+    if (c.length < 8) return false;
+    // Reject content that looks like it's describing the task
+    if (/^(从|将|在|请|你|根据|按照|对).*(提炼|提取|拆解|分解|划分|组织|整理|输出|返回)/i.test(c)) return false;
+    return true;
+  });
+
+  if (validSections.length === 0) {
+    return { status: 'skipped', reason: '提取内容未通过验证（疑似API返回了Prompt指令）', hierarchy };
+  }
+
+  // Step 3: Append to tree
   let updatedTree = currentTree;
-  updatedTree = appendToTree(updatedTree, hierarchy, dedupResult.new_sections, url);
+  updatedTree = appendToTree(updatedTree, hierarchy, validSections, url);
 
   await saveTree(updatedTree);
 
-  // Update status
   await updateCaptureStatus({
     lastCapture: Date.now(),
     lastPlatform: payload.platform,
     lastTitle: title,
     lastHierarchy: hierarchy.join(' > '),
-    newPoints: dedupResult.new_sections.length,
+    newPoints: validSections.length,
     totalConversations: (await getCaptureCount()) + 1
   });
 
   return {
     status: 'success',
     hierarchy: hierarchy.join(' > '),
-    newPoints: dedupResult.new_sections.length,
+    newPoints: validSections.length,
     keywords: classification.keywords || []
   };
 }

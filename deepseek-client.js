@@ -1,5 +1,5 @@
 // DeepSeek API Client
-// Three API calls: classify → structure → dedup
+// Two API calls: classify → (structure + dedup combined)
 
 const DEEPSEEK_API_BASE = 'https://api.deepseek.com';
 const DEFAULT_MODEL = 'deepseek-chat';
@@ -49,84 +49,61 @@ async function callDeepSeek(systemPrompt, userPrompt, { temperature = 0.3, maxTo
   }
 }
 
-// ── Call 1: Classify conversation ──
+// ── Step 1: Classify → is this learning content? what's the topic hierarchy? ──
 
 async function classifyConversation(conversation) {
   const userQuestions = conversation.filter(m => m.role === 'user').map(m => m.content).join('\n---\n');
   const aiAnswers = conversation.filter(m => m.role === 'assistant').map(m => m.content).join('\n---\n');
 
-  const systemPrompt = '你是一个知识分类专家。你只返回JSON，不返回任何解释文字。';
+  const systemPrompt = '你是一个知识分类专家。只返回JSON，不含解释。';
 
-  const userPrompt = `判断以下对话是否属于学习/知识获取内容（编程、数学、科学、学术、技能等）。
-如果不是学习内容则 is_learning=false。
-如果是学习内容，请归类到合适的知识层级（2-4级，从大到小）。
+  const userPrompt = `判断这段对话是否属于学习/知识获取类（编程、数学、科学、学术、技能等）。如果是，请归类到2-4级知识层级。
 
 === 用户问题 ===
 ${userQuestions.substring(0, 2000)}
 
-=== AI回答（前段） ===
+=== AI回答摘要 ===
 ${aiAnswers.substring(0, 1000)}
 
-返回JSON格式（不要包含其他文字）：
+返回JSON：
 {
   "is_learning": true,
-  "hierarchy": ["一级大类", "二级子类", "三级具体主题", "四级细分点"],
-  "keywords": ["关键词1", "关键词2"]
+  "hierarchy": ["一级类", "二级类", "三级主题"],
+  "keywords": ["关键词"]
 }`;
 
   return callDeepSeek(systemPrompt, userPrompt, { temperature: 0.2, maxTokens: 1000 });
 }
 
-// ── Call 2: Structure AI response into knowledge points ──
+// ── Step 2: Extract knowledge from AI response (structure + dedup in one call) ──
 
-async function structureContent(aiResponse) {
-  const systemPrompt = '你是一个知识提炼师。你的任务是从AI教程回答中直接提取知识点。你只返回JSON，每条content是可直接入知识库的总结句。';
+async function extractKnowledge(aiResponse, existingSectionContent, sourceUrl) {
+  // Trim the AI response to avoid token waste
+  const contentToExtract = aiResponse.substring(0, 8000);
 
-  const userPrompt = `从以下AI回答中，逐条提炼核心知识点。每条知识点用1-2句话概括（保留关键概念、代码片段、公式等）。
-不要输出"如何拆解"或"结构化方法"之类的元描述，直接输出知识点本身。
+  const systemPrompt =
+    '你是知识提取器。输入一段AI教程回答，你从原文中提取知识点，输出为JSON。' +
+    '每条content必须是原文中实际出现的知识点，用原文的语言表述。' +
+    '禁止输出方法论文本（如"提炼"、"拆解"、"结构化"等元描述），只输出知识本身。';
 
-=== 要提炼的AI回答 ===
-${aiResponse.substring(0, 6000)}
+  const userPrompt =
+`【已有知识】（用于去重）
+${existingSectionContent.substring(0, 2000)}
 
-返回JSON（只返回JSON，无其他文字）：
+【原文内容】
+${contentToExtract}
+
+【任务】
+从【原文内容】中逐段提取知识点。每条1-2句，保留关键概念、代码、公式。
+只提取【原文内容】中实际出现的知识，不要凭空编造。
+如果与【已有知识】重复，跳过该条。
+
+返回JSON：
 {
   "sections": [
-    {"heading": "这个知识点的简短标题(≤15字)", "level": 3, "content": "知识点的核心内容，1-2句话，保留代码/公式"}
+    {"heading": "知识点标题(≤15字)", "level": 3, "content": "原文中的具体知识点内容"}
   ]
-}
-
-level含义：2=大主题, 3=具体概念, 4=细节补充, 5=最细粒度点`;
-
-  return callDeepSeek(systemPrompt, userPrompt, { temperature: 0.2, maxTokens: 3000 });
-}
-
-// ── Call 3: Dedup against existing knowledge ──
-
-async function dedupContent(existingSectionContent, newSections) {
-  const newContentStr = JSON.stringify(newSections);
-
-  const systemPrompt = '你是一个知识去重专家。对比已有知识和新知识，只返回真正新增的内容。你只返回JSON。';
-
-  const userPrompt = `对比已有知识和新知识，只保留实质性不同的新知识。
-
-已有知识：
-${existingSectionContent.substring(0, 3000)}
-
-新知识候选：
-${newContentStr.substring(0, 3000)}
-
-去重标准：
-- 核心概念相同、仅表述不同 → 去掉
-- 已有知识已经完全覆盖 → 去掉
-- 补充了新细节、新角度、新代码示例 → 保留
-- 完全新的概念 → 保留
-
-返回JSON（只返回JSON）：
-{
-  "is_duplicate": true,
-  "new_sections": [],
-  "reason": "简要说明"
 }`;
 
-  return callDeepSeek(systemPrompt, userPrompt, { temperature: 0.1, maxTokens: 2000 });
+  return callDeepSeek(systemPrompt, userPrompt, { temperature: 0.2, maxTokens: 3000 });
 }
