@@ -104,10 +104,9 @@ async function handleCapture(payload) {
     return { status: 'skipped', reason: '无新增知识点', hierarchy };
   }
 
-  // Step 4: Append new knowledge to tree
+  // Step 4: Append new knowledge to tree (content + link combined)
   let updatedTree = currentTree;
-  updatedTree = appendKnowledgePoints(updatedTree, hierarchy, dedupResult.new_sections);
-  updatedTree = addSourceLinks(updatedTree, hierarchy, [url]);
+  updatedTree = appendToTree(updatedTree, hierarchy, dedupResult.new_sections, url);
 
   await saveTree(updatedTree);
 

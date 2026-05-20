@@ -2,7 +2,7 @@
 // Manages the single growing knowledge-tree.md file
 
 const STORAGE_KEY = 'knowledge_tree_md';
-const TREE_HEADER = '# 🧠 AI 知识树\n\n> 自动生成于 ' + new Date().toISOString().split('T')[0] + '\n> 新知识自动归类追加，重复内容自动过滤\n\n';
+const TREE_HEADER = '# 🧠 AI 知识树\n\n> 新知识自动归类，重复过滤\n\n';
 
 async function initTree() {
   const result = await chrome.storage.local.get(STORAGE_KEY);
@@ -22,191 +22,119 @@ async function saveTree(md) {
   await chrome.storage.local.set({ [STORAGE_KEY]: md });
 }
 
-/**
- * Build a markdown heading line at a given level
- * level: 1 = #, 2 = ##, 3 = ###, 4 = ####, 5 = #####
- */
 function mdHeading(text, level) {
-  const hashes = '#'.repeat(Math.min(level, 5));
-  return `${hashes} ${text}`;
+  return '#'.repeat(Math.min(level, 5)) + ' ' + text;
 }
 
-/**
- * Extract the section content under a specific hierarchy path from the MD tree.
- * Returns { startIndex, endIndex, content } or null if not found.
- */
+// ── Find a section by hierarchy path ──
+
 function findSection(md, hierarchy) {
   const lines = md.split('\n');
-  let sectionStart = -1;
-  let sectionEnd = lines.length;
-  let foundDepth = 0;
 
   for (let i = 0; i < lines.length; i++) {
-    const line = lines[i];
-    const match = line.match(/^(#{1,5})\s+(.+)/);
+    const match = lines[i].match(/^(#{2,5})\s+(.+)/);
     if (!match) continue;
 
     const depth = match[1].length;
     const title = match[2].trim();
 
-    // Check if this heading matches any level of our hierarchy
-    for (let h = 0; h < hierarchy.length; h++) {
-      if (depth === h + 2 && title === hierarchy[h]) { // level 1 = ##, level 2 = ###, etc.
-        if (h === hierarchy.length - 1) {
-          // This is our target section
-          sectionStart = i;
-          foundDepth = depth;
-
-          // Find the end: next heading of same or higher level
-          for (let j = i + 1; j < lines.length; j++) {
-            const nextMatch = lines[j].match(/^(#{1,5})\s+/);
-            if (nextMatch && nextMatch[1].length <= foundDepth) {
-              sectionEnd = j;
-              break;
-            }
-          }
-          return {
-            startIndex: sectionStart,
-            endIndex: sectionEnd,
-            headingLine: i,
-            content: lines.slice(sectionStart, sectionEnd).join('\n')
-          };
-        }
-        // Continue searching within this section for the next level
-        break;
+    if (depth === hierarchy.length + 1 && title === hierarchy[hierarchy.length - 1]) {
+      // Found the target section heading
+      let end = lines.length;
+      for (let j = i + 1; j < lines.length; j++) {
+        const m2 = lines[j].match(/^(#{2,5})\s+/);
+        if (m2 && m2[1].length <= depth) { end = j; break; }
       }
+      return {
+        headingLine: i,
+        headingDepth: depth,
+        endIndex: end,
+        content: lines.slice(i, end).join('\n')
+      };
     }
   }
-
   return null;
 }
 
-/**
- * Ensure all hierarchy levels exist in the MD tree.
- * Creates missing sections and returns the insert position for leaf content.
- */
+// ── Ensure hierarchy path exists, return insert position ──
+
 function ensureHierarchy(md, hierarchy) {
-  let result = md;
-  let lastInsertIndex = -1;
+  let lines = md.split('\n');
 
   for (let i = 0; i < hierarchy.length; i++) {
-    const headingLevel = i + 2; // ##, ###, ####, #####
-    const headingLine = mdHeading(hierarchy[i], headingLevel);
+    const level = i + 2; // ##, ###, ####, #####
+    const headingLine = mdHeading(hierarchy[i], level);
 
-    // Check if this heading already exists at the right position
-    const existing = findSection(result, hierarchy.slice(0, i + 1));
-    if (existing) {
-      lastInsertIndex = existing.headingLine;
-      continue;
-    }
-
-    // Need to create this section
-    // Find where to insert: after the parent section's heading, before the next same-level heading
-    const lines = result.split('\n');
-    let insertAt = lines.length;
-
-    if (i === 0) {
-      // Top level: find the right alphabetical position among other ## headings
-      insertAt = findInsertPosition(lines, headingLine, 2);
-    } else {
-      // Insert after parent heading
-      const parentSection = findSection(result, hierarchy.slice(0, i));
-      if (parentSection) {
-        // Find the end of parent's direct content, before any existing sub-sections
-        insertAt = parentSection.headingLine + 1;
-      }
-    }
-
-    lines.splice(insertAt, 0, '', headingLine);
-    result = lines.join('\n');
-    lastInsertIndex = insertAt + 1; // +1 for the blank line we added
-  }
-
-  return { md: result, insertAfterLine: lastInsertIndex };
-}
-
-function findInsertPosition(lines, newHeading, level) {
-  const newHash = '#'.repeat(level);
-  let insertAt = lines.length;
-
-  for (let i = 0; i < lines.length; i++) {
-    const match = lines[i].match(/^(#{1,5})\s+/);
-    if (match && match[1].length === level) {
-      const existingTitle = lines[i].replace(/^#{1,5}\s+/, '').trim();
-      const newTitle = newHeading.replace(/^#{1,5}\s+/, '').trim();
-      if (existingTitle.localeCompare(newTitle, 'zh-CN') > 0) {
-        insertAt = i;
+    // Check if heading already exists at correct level
+    let found = false;
+    for (let j = 0; j < lines.length; j++) {
+      const m = lines[j].match(/^(#{2,5})\s+(.+)/);
+      if (m && m[1].length === level && m[2].trim() === hierarchy[i]) {
+        found = true;
         break;
       }
     }
+
+    if (!found) {
+      // Insert heading — find the right place under parent
+      let insertAt = lines.length;
+      if (i === 0) {
+        // Top level: insert alphabetically among ## headings
+        for (let j = 0; j < lines.length; j++) {
+          const m = lines[j].match(/^(#{2,5})\s+(.+)/);
+          if (m && m[1].length === 2 && m[2].trim().localeCompare(hierarchy[i], 'zh-CN') > 0) {
+            insertAt = j;
+            break;
+          }
+        }
+      } else {
+        // Find parent heading, insert after it
+        for (let j = 0; j < lines.length; j++) {
+          const m = lines[j].match(/^(#{2,5})\s+(.+)/);
+          if (m && m[1].length === level - 1 && m[2].trim() === hierarchy[i - 1]) {
+            insertAt = j + 1;
+            break;
+          }
+        }
+      }
+      lines.splice(insertAt, 0, '', headingLine);
+    }
   }
-  return insertAt;
+
+  return lines.join('\n');
 }
 
-/**
- * Append knowledge points (leaf nodes) under a specific section.
- */
-function appendKnowledgePoints(md, hierarchy, sections) {
-  let currentMd = md;
+// ── Append knowledge points with links ──
 
-  // First ensure the hierarchy path exists
-  const ensured = ensureHierarchy(currentMd, hierarchy);
-  currentMd = ensured.md;
-
-  // Find the target section
+function appendToTree(md, hierarchy, sections, sourceUrl) {
+  let currentMd = ensureHierarchy(md, hierarchy);
   const section = findSection(currentMd, hierarchy);
-  if (!section) return currentMd;
-
   const lines = currentMd.split('\n');
-  const headingLevel = hierarchy.length + 1; // Next level after the last hierarchy
-  const hashes = '#'.repeat(Math.min(headingLevel, 5));
 
-  // Build the content to insert
+  // Build the content to insert: each section gets a heading, then bullet points
   const newLines = [];
+  const leafLevel = Math.min(hierarchy.length + 2, 5); // One level deeper than hierarchy[-1]
+
   for (const s of sections) {
+    if (!s.content) continue;
+
+    // Sub-heading for the knowledge point
     if (s.heading) {
-      newLines.push(`${hashes} ${s.heading}`);
+      newLines.push('');  // blank line before heading
+      newLines.push(mdHeading(s.heading, leafLevel));
     }
-    if (s.content) {
-      newLines.push(s.content);
-    }
-    newLines.push('');
+
+    // Knowledge point as bullet with source link
+    const cleanContent = s.content
+      .replace(/^["「]/g, '').replace(/["」]$/g, '')  // strip quotes
+      .replace(/\n+/g, ' ');  // single line
+    newLines.push(`- ${cleanContent} → [原文](${sourceUrl})`);
   }
 
-  // Find insertion point: end of the section
-  const sectionEnd = section.headingLine + 1;
-  // Skip existing content after heading to find where to append
-  let insertAt = sectionEnd;
-  for (let j = sectionEnd; j < lines.length; j++) {
-    const nextMatch = lines[j].match(/^(#{1,5})\s+/);
-    if (nextMatch && nextMatch[1].length <= hierarchy.length + 1) {
-      insertAt = j;
-      break;
-    }
-    insertAt = j + 1;
-  }
+  if (newLines.length === 0) return currentMd;
 
+  // Insert at end of section
+  let insertAt = section ? section.endIndex : lines.length;
   lines.splice(insertAt, 0, ...newLines);
   return lines.join('\n');
 }
-
-/**
- * Add source links as leaf nodes
- */
-function addSourceLinks(md, hierarchy, links) {
-  let currentMd = md;
-  const ensured = ensureHierarchy(currentMd, hierarchy);
-  currentMd = ensured.md;
-
-  const section = findSection(currentMd, hierarchy);
-  if (!section) return currentMd;
-
-  const lines = currentMd.split('\n');
-  const newLines = links.map(link => `- [查看原文](${link})`);
-
-  let insertAt = section.endIndex;
-  lines.splice(insertAt, 0, ...newLines, '');
-  return lines.join('\n');
-}
-
-// Functions are available globally for importScripts in service worker context

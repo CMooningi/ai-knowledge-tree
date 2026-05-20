@@ -9,7 +9,7 @@ async function getApiKey() {
   return result.deepseek_api_key || '';
 }
 
-async function callDeepSeek(prompt, { temperature = 0.3, maxTokens = 2000 } = {}) {
+async function callDeepSeek(systemPrompt, userPrompt, { temperature = 0.3, maxTokens = 2000 } = {}) {
   const apiKey = await getApiKey();
   if (!apiKey) {
     throw new Error('DeepSeek API Key 未配置，请在扩展设置中配置。');
@@ -24,8 +24,8 @@ async function callDeepSeek(prompt, { temperature = 0.3, maxTokens = 2000 } = {}
     body: JSON.stringify({
       model: DEFAULT_MODEL,
       messages: [
-        { role: 'system', content: '你是一个知识整理助手。你必须只返回有效的 JSON 格式，不要包含任何其他文字、解释或 markdown 代码块标记。' },
-        { role: 'user', content: prompt }
+        { role: 'system', content: systemPrompt },
+        { role: 'user', content: userPrompt }
       ],
       temperature,
       max_tokens: maxTokens,
@@ -40,8 +40,6 @@ async function callDeepSeek(prompt, { temperature = 0.3, maxTokens = 2000 } = {}
 
   const data = await response.json();
   const content = data.choices[0].message.content.trim();
-
-  // Strip markdown code fences if present
   const jsonStr = content.replace(/^```json\s*/i, '').replace(/^```\s*/i, '').replace(/\s*```$/i, '').trim();
 
   try {
@@ -51,100 +49,84 @@ async function callDeepSeek(prompt, { temperature = 0.3, maxTokens = 2000 } = {}
   }
 }
 
-/**
- * Call 1: Determine if learning content + classify into hierarchy
- */
+// ── Call 1: Classify conversation ──
+
 async function classifyConversation(conversation) {
-  const userQuestions = conversation.filter(m => m.role === 'user').map(m => m.content).join('\n\n');
-  const aiAnswers = conversation.filter(m => m.role === 'assistant').map(m => m.content).join('\n\n');
+  const userQuestions = conversation.filter(m => m.role === 'user').map(m => m.content).join('\n---\n');
+  const aiAnswers = conversation.filter(m => m.role === 'assistant').map(m => m.content).join('\n---\n');
 
-  const prompt = `分析以下对话，判断这段对话是否属于"学习/知识获取/技术讨论"类型。
+  const systemPrompt = '你是一个知识分类专家。你只返回JSON，不返回任何解释文字。';
 
-学习内容包括但不限于：编程技术、数学、科学、工程、语言学习、学术讨论、技能教学、原理分析等。
-非学习内容：闲聊、娱乐八卦、日常问候、单纯的翻译、简单的信息查询等。
+  const userPrompt = `判断以下对话是否属于学习/知识获取内容（编程、数学、科学、学术、技能等）。
+如果不是学习内容则 is_learning=false。
+如果是学习内容，请归类到合适的知识层级（2-4级，从大到小）。
 
-如果是学习内容，请为这段对话归类到合适的知识层级（2-4级）。
-层级设计原则：一级为大领域，二级为子领域，三级为具体技术/概念，四级为细分点。
-
-用户问题：
+=== 用户问题 ===
 ${userQuestions.substring(0, 2000)}
 
-AI 回答摘要（截取前部）：
+=== AI回答（前段） ===
 ${aiAnswers.substring(0, 1000)}
 
-返回 JSON：
+返回JSON格式（不要包含其他文字）：
 {
-  "is_learning": true/false,
-  "hierarchy": ["一级分类", "二级分类", "三级分类", "末级标题"],
-  "keywords": ["关键词1", "关键词2", "关键词3"]
+  "is_learning": true,
+  "hierarchy": ["一级大类", "二级子类", "三级具体主题", "四级细分点"],
+  "keywords": ["关键词1", "关键词2"]
+}`;
+
+  return callDeepSeek(systemPrompt, userPrompt, { temperature: 0.2, maxTokens: 1000 });
 }
 
-注意：
-1. hierarchy 数组长度 2-4，按从粗到细排列
-2. 如果判断为非学习内容，hierarchy 和 keywords 可以为空数组
-3. 末级标题要足够具体，能唯一标识这个知识点`;
+// ── Call 2: Structure AI response into knowledge points ──
 
-  return callDeepSeek(prompt, { temperature: 0.2, maxTokens: 1000 });
-}
-
-/**
- * Call 2: Break down AI response into hierarchical knowledge points
- */
 async function structureContent(aiResponse) {
-  const prompt = `将以下 AI 回答/教程内容拆解为层级化知识结构。每个知识点包含标题（heading）、层级（level: 2-5）、和精简的核心内容（content）。
+  const systemPrompt = '你是一个知识提炼师。你的任务是从AI教程回答中直接提取知识点。你只返回JSON，每条content是可直接入知识库的总结句。';
 
-AI 回答内容：
+  const userPrompt = `从以下AI回答中，逐条提炼核心知识点。每条知识点用1-2句话概括（保留关键概念、代码片段、公式等）。
+不要输出"如何拆解"或"结构化方法"之类的元描述，直接输出知识点本身。
+
+=== 要提炼的AI回答 ===
 ${aiResponse.substring(0, 6000)}
 
-返回 JSON：
+返回JSON（只返回JSON，无其他文字）：
 {
   "sections": [
-    {
-      "heading": "知识点小标题",
-      "level": 2,
-      "content": "精简后的核心知识点，去除冗余表述，保留关键概念和代码（1-3句话）"
-    }
+    {"heading": "这个知识点的简短标题(≤15字)", "level": 3, "content": "知识点的核心内容，1-2句话，保留代码/公式"}
   ]
 }
 
-要求：
-1. heading 要简洁（不超过15个字）
-2. level 2-5，2 是子主题，5 是最末级细节
-3. content 精简但保留核心要点
-4. 如果 AI 回答很长，取出所有重要知识点，不要遗漏
-5. 按照内容原有的逻辑层级组织 sections`;
+level含义：2=大主题, 3=具体概念, 4=细节补充, 5=最细粒度点`;
 
-  return callDeepSeek(prompt, { temperature: 0.2, maxTokens: 3000 });
+  return callDeepSeek(systemPrompt, userPrompt, { temperature: 0.2, maxTokens: 3000 });
 }
 
-/**
- * Call 3: Compare existing content with new, return only new knowledge
- */
+// ── Call 3: Dedup against existing knowledge ──
+
 async function dedupContent(existingSectionContent, newSections) {
   const newContentStr = JSON.stringify(newSections);
 
-  const prompt = `对比已有的知识库内容和新的知识点，找出真正新增的知识（已有内容中未出现或实质性不同的知识）。
+  const systemPrompt = '你是一个知识去重专家。对比已有知识和新知识，只返回真正新增的内容。你只返回JSON。';
 
-已有知识库内容（对应章节）：
+  const userPrompt = `对比已有知识和新知识，只保留实质性不同的新知识。
+
+已有知识：
 ${existingSectionContent.substring(0, 3000)}
 
-新知识点列表（JSON）：
+新知识候选：
 ${newContentStr.substring(0, 3000)}
 
-判断标准：
-1. 概念相同、只是表述不同 → 重复，不保留
-2. 已有内容已覆盖了该知识点 → 重复，不保留
-3. 全新概念、新的细节、补充说明、不同角度 → 新知识
-4. 代码示例不同且展示了新用法 → 新知识
+去重标准：
+- 核心概念相同、仅表述不同 → 去掉
+- 已有知识已经完全覆盖 → 去掉
+- 补充了新细节、新角度、新代码示例 → 保留
+- 完全新的概念 → 保留
 
-返回 JSON：
+返回JSON（只返回JSON）：
 {
-  "is_duplicate": true/false,
-  "new_sections": [
-    {"heading": "...", "level": 3, "content": "..."}
-  ],
-  "reason": "简短说明判断理由（1句话）"
+  "is_duplicate": true,
+  "new_sections": [],
+  "reason": "简要说明"
 }`;
 
-  return callDeepSeek(prompt, { temperature: 0.1, maxTokens: 2000 });
+  return callDeepSeek(systemPrompt, userPrompt, { temperature: 0.1, maxTokens: 2000 });
 }
