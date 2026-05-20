@@ -97,8 +97,7 @@ function setupEventListeners() {
   document.getElementById('btnViewTree').addEventListener('click', async () => {
     const result = await chrome.runtime.sendMessage({ type: 'GET_TREE' });
     if (result.md) {
-      const blob = new Blob([result.md], { type: 'text/markdown' });
-      const url = URL.createObjectURL(blob);
+      const url = 'data:text/markdown;charset=utf-8,' + encodeURIComponent(result.md);
       chrome.tabs.create({ url });
     }
   });
@@ -107,8 +106,7 @@ function setupEventListeners() {
   document.getElementById('btnExportTree').addEventListener('click', async () => {
     const result = await chrome.runtime.sendMessage({ type: 'EXPORT_TREE' });
     if (result.md) {
-      const blob = new Blob([result.md], { type: 'text/markdown' });
-      const url = URL.createObjectURL(blob);
+      const url = 'data:text/markdown;charset=utf-8,' + encodeURIComponent(result.md);
       const timestamp = new Date().toISOString().split('T')[0];
       chrome.downloads.download({
         url,
