@@ -255,19 +255,23 @@ if (document.readyState === 'complete') {
 // ── Manual capture from popup ──
 chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
   if (msg.type === 'MANUAL_CAPTURE') {
-    const messages = extractMessages();
-    if (messages && messages.length > 0) {
-      messages.forEach(m => capturedMessageIds.add(m.id));
-      sendResponse({
-        platform: window.location.hostname,
-        url: window.location.href,
-        title: document.title,
-        timestamp: Date.now(),
-        messages
-      });
-    } else {
-      sendResponse(null);
+    try {
+      const messages = extractMessages();
+      if (messages && messages.length > 0) {
+        messages.forEach(m => capturedMessageIds.add(m.id));
+        sendResponse({
+          platform: window.location.hostname,
+          url: window.location.href,
+          title: document.title,
+          timestamp: Date.now(),
+          messages
+        });
+      } else {
+        sendResponse(null);
+      }
+    } catch (err) {
+      sendResponse({ error: err.message });
     }
+    return true; // async response only for handled messages
   }
-  return true;
 });
