@@ -1,0 +1,87 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>AI 知识树 — 设置</title>
+  <link rel="stylesheet" href="options.css">
+</head>
+<body>
+  <div class="options-container">
+    <header>
+      <a href="#" id="backLink">← 返回</a>
+      <h1>⚙️ 扩展设置</h1>
+    </header>
+
+    <section class="setting-group">
+      <h2>DeepSeek API 配置</h2>
+      <p class="desc">用于分析对话内容、归类知识点、去重。</p>
+
+      <div class="form-item">
+        <label for="apiKey">API Key</label>
+        <div class="input-row">
+          <input type="password" id="apiKey" placeholder="sk-xxxxxxxxxxxxxxxx">
+          <button class="btn-icon" id="btnToggleKey" title="显示/隐藏">👁️</button>
+        </div>
+        <span class="hint">在 <a href="https://platform.deepseek.com/api_keys" target="_blank">platform.deepseek.com</a> 获取</span>
+      </div>
+
+      <div class="form-item">
+        <label for="modelSelect">模型</label>
+        <select id="modelSelect">
+          <option value="deepseek-chat">DeepSeek Chat (推荐)</option>
+          <option value="deepseek-reasoner">DeepSeek Reasoner (R1)</option>
+        </select>
+      </div>
+
+      <button class="btn btn-primary" id="btnSaveKey">💾 保存配置</button>
+      <button class="btn btn-secondary" id="btnTestKey">🔍 测试连接</button>
+      <div class="test-result" id="testResult"></div>
+    </section>
+
+    <section class="setting-group">
+      <h2>知识树管理</h2>
+
+      <div class="form-item">
+        <label>当前知识树</label>
+        <div class="stats-row">
+          <span id="treeSize">0 字符</span>
+          <span id="treeLines">0 行</span>
+        </div>
+      </div>
+
+      <div class="btn-row">
+        <button class="btn btn-secondary" id="btnViewTree">📄 查看知识树</button>
+        <button class="btn btn-secondary" id="btnExportTree">💾 导出 MD</button>
+        <button class="btn btn-danger" id="btnClearTree">🗑️ 清空知识树</button>
+      </div>
+    </section>
+
+    <section class="setting-group">
+      <h2>自动抓取设置</h2>
+
+      <div class="form-item">
+        <label class="toggle-label">
+          <input type="checkbox" id="autoCapture" checked>
+          <span>自动检测并抓取 AI 学习对话</span>
+        </label>
+      </div>
+
+      <div class="form-item">
+        <label class="toggle-label">
+          <input type="checkbox" id="notifyOnCapture" checked>
+          <span>抓取成功时显示通知</span>
+        </label>
+      </div>
+
+      <button class="btn btn-primary" id="btnSaveSettings">💾 保存设置</button>
+    </section>
+
+    <footer>
+      <p>AI 知识树 v1.0 | <a href="https://github.com" target="_blank">GitHub</a></p>
+    </footer>
+  </div>
+
+  <script src="options.js"></script>
+</body>
+</html>

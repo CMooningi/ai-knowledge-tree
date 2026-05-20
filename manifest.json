@@ -1,0 +1,47 @@
+{
+  "manifest_version": 3,
+  "name": "AI 知识树",
+  "version": "1.0.0",
+  "description": "自动抓取 AI 学习对话，整理为层级知识树 Markdown 文件，新知识自动归类追加。",
+  "icons": {
+    "16": "icons/icon16.png",
+    "48": "icons/icon48.png",
+    "128": "icons/icon128.png"
+  },
+  "action": {
+    "default_popup": "popup/popup.html",
+    "default_title": "AI 知识树",
+    "default_icon": {
+      "16": "icons/icon16.png",
+      "48": "icons/icon48.png",
+      "128": "icons/icon128.png"
+    }
+  },
+  "options_page": "options/options.html",
+  "background": {
+    "service_worker": "background.js"
+  },
+  "content_scripts": [
+    {
+      "matches": [
+        "https://chat.deepseek.com/*",
+        "https://kimi.moonshot.cn/*",
+        "https://chat.openai.com/*",
+        "https://claude.ai/*",
+        "https://yuanbao.tencent.com/*",
+        "https://tongyi.aliyun.com/*",
+        "https://yiyan.baidu.com/*"
+      ],
+      "js": ["content.js"],
+      "run_at": "document_idle"
+    }
+  ],
+  "permissions": [
+    "storage",
+    "activeTab",
+    "downloads"
+  ],
+  "host_permissions": [
+    "https://api.deepseek.com/*"
+  ]
+}

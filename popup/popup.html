@@ -1,0 +1,61 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>AI 知识树</title>
+  <link rel="stylesheet" href="popup.css">
+</head>
+<body>
+  <div class="popup-container">
+    <header>
+      <h1>🌳 AI 知识树</h1>
+      <span class="version">v1.0</span>
+    </header>
+
+    <div class="status-bar" id="statusBar">
+      <span class="status-dot" id="statusDot"></span>
+      <span id="statusText">就绪</span>
+    </div>
+
+    <div class="info-cards">
+      <div class="info-card">
+        <div class="card-value" id="treeLines">0</div>
+        <div class="card-label">知识条目</div>
+      </div>
+      <div class="info-card">
+        <div class="card-value" id="captureCount">0</div>
+        <div class="card-label">抓取次数</div>
+      </div>
+      <div class="info-card">
+        <div class="card-value" id="lastPoints">-</div>
+        <div class="card-label">最近新增</div>
+      </div>
+    </div>
+
+    <div class="last-capture" id="lastCapture" style="display:none">
+      <div class="last-title" id="lastTitle"></div>
+      <div class="last-hierarchy" id="lastHierarchy"></div>
+    </div>
+
+    <div class="actions">
+      <button class="btn btn-primary" id="btnPreview">
+        📄 预览知识树
+      </button>
+      <button class="btn btn-secondary" id="btnExport">
+        💾 导出 MD
+      </button>
+      <button class="btn btn-secondary" id="btnCapture">
+        📸 手动抓取
+      </button>
+    </div>
+
+    <div class="footer">
+      <button class="btn-text" id="btnSettings">⚙️ 设置</button>
+      <button class="btn-text btn-danger" id="btnClear">🗑️ 清空知识树</button>
+    </div>
+  </div>
+
+  <script src="popup.js"></script>
+</body>
+</html>
