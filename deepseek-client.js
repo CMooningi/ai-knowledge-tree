@@ -1,5 +1,4 @@
-// DeepSeek API Client v3
-// Minimal prompts, plain text output, manual parsing
+// DeepSeek API Client v4
 
 const DEEPSEEK_API_BASE = 'https://api.deepseek.com';
 const DEFAULT_MODEL = 'deepseek-chat';
@@ -36,65 +35,87 @@ async function chat(messages, { temperature = 0.3, maxTokens = 2000 } = {}) {
   return data.choices[0].message.content.trim();
 }
 
-// ── Call 1: Classify ──
+// ── Step 1: Classify ──
 
 async function classifyConversation(conversation) {
-  const text = conversation.map(m => `[${m.role === 'user' ? '问' : '答'}] ${m.content}`).join('\n\n');
+  const text = conversation
+    .map(m => `[${m.role === 'user' ? '用户' : 'AI'}] ${m.content}`)
+    .join('\n\n');
 
   const content = await chat([
-    { role: 'system', content: '你是知识分类器。只输出JSON，无解释。' },
-    { role: 'user', content: `判断是否为学习内容（编程/数学/科学/学术等），是则给出2-4级分类层级。
+    { role: 'system', content: '知识分类器。只输出JSON。' },
+    { role: 'user', content: `判断对话是否属于学习内容。是则给出2-4级层级分类。
 
 ${text.substring(0, 3000)}
 
-输出JSON: {"is_learning":true,"hierarchy":["大类","子类","主题"],"keywords":["k1"]}` }
+输出JSON: {"is_learning":true,"hierarchy":["大类","子类","主题"],"keywords":["k1","k2"]}` }
   ], { temperature: 0.1, maxTokens: 800 });
 
   try {
-    const json = JSON.parse(content.replace(/```json|```/g, '').trim());
-    return json;
+    return JSON.parse(content.replace(/```json|```/g, '').trim());
   } catch (e) {
     throw new Error('分类JSON解析失败: ' + content.slice(0, 200));
   }
 }
 
-// ── Call 2: Extract knowledge ──
+// ── Step 2: Extract knowledge with full detail ──
 
 async function extractKnowledge(aiResponse, existingContent, sourceUrl) {
   const response = await chat([
-    { role: 'system', content: '你是知识提取器。从AI回答中逐条提取知识点，每条一行。只输出知识点本身，不要任何解释、不要标题、不要点评。如果与已有知识重复就跳过。' },
-    { role: 'user', content: `【已有知识】
-${existingContent.slice(0, 1500)}
+    { role: 'system', content:
+      '你是知识提炼师。从AI教程回答中提取知识点，每个知识点包含标题和详细正文。' +
+      '正文要尽量保留原文中的解释、概念、代码、公式等细节，不要过度精简。' +
+      '只输出知识点本身，不输出任何任务描述或元分析。'
+    },
+    { role: 'user', content:
+`【已有知识】（重复则跳过）
+${existingContent.slice(0, 1000)}
 
-【AI回答原文】
-${aiResponse.slice(0, 6000)}
+【要提炼的AI回答】
+${aiResponse.slice(0, 8000)}
 
-逐条列出原文中出现的新知识点（每条一行，-"开头）：` }
-  ], { temperature: 0.1, maxTokens: 2500 });
+逐条列出新知识点。每条格式：
+## 知识点标题
+详细正文（保留原文的解释、代码、公式。3-8句为宜）
+---` }
+  ], { temperature: 0.2, maxTokens: 4000 });
 
   console.log('[知识树] API原始返回:\n', response);
 
-  // Parse bullet-list response into sections
-  const lines = response.split('\n').filter(line => {
-    const t = line.trim();
-    return t.startsWith('-') || t.startsWith('•') || t.match(/^\d+[\.\)]/);
-  });
+  // Parse: split by ## heading or numbered items
+  const sections = [];
+  const blocks = response.split(/\n(?=##\s)/);
 
-  const sections = lines.map(line => {
-    const cleaned = line.replace(/^[-•\d]+[\.\)]\s*/, '').trim();
-    return {
-      heading: cleaned.slice(0, 20),
+  for (const block of blocks) {
+    const lines = block.trim().split('\n');
+    if (lines.length === 0) continue;
+
+    let heading = '';
+    const contentLines = [];
+
+    for (const line of lines) {
+      const hMatch = line.match(/^##\s+(.+)/);
+      if (hMatch && !heading) {
+        heading = hMatch[1].trim();
+      } else if (!/^---\s*$/.test(line) && line.trim()) {
+        contentLines.push(line.trim());
+      }
+    }
+
+    const content = contentLines.join('\n').trim();
+
+    // Filter invalid entries
+    if (!content || content.length < 15) continue;
+    if (/拆解|提炼|结构化.*方法|返回.*JSON|请提供.*内容|以下.*回答|上述.*原文/i.test(content)) continue;
+    if (/^[#*\-\d]/.test(content) && content.length < 30) continue;
+
+    sections.push({
+      heading: heading || content.slice(0, 25),
       level: 4,
-      content: cleaned
-    };
-  }).filter(s => {
-    const c = s.content;
-    // Aggressive filter: reject anything that looks like meta-instruction
-    if (c.length < 10) return false;
-    if (/拆解|提炼|提取.*知识|结构化|层级.*标题|知识点.*包含|返回.*JSON|输出.*格式|以下.*内容|上述.*原文|上述.*回答/i.test(c)) return false;
-    return true;
-  });
+      content: content
+    });
+  }
 
-  console.log('[知识树] 解析后sections:', sections.length, '条');
+  console.log('[知识树] 解析出', sections.length, '个知识点');
   return { sections };
 }

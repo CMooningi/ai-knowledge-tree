@@ -104,37 +104,47 @@ function ensureHierarchy(md, hierarchy) {
   return lines.join('\n');
 }
 
-// ── Append knowledge points with links ──
+// ── Append detailed knowledge blocks ──
 
 function appendToTree(md, hierarchy, sections, sourceUrl) {
   let currentMd = ensureHierarchy(md, hierarchy);
   const section = findSection(currentMd, hierarchy);
   const lines = currentMd.split('\n');
 
-  // Build the content to insert: each section gets a heading, then bullet points
   const newLines = [];
-  const leafLevel = Math.min(hierarchy.length + 2, 5); // One level deeper than hierarchy[-1]
+  const leafLevel = Math.min(hierarchy.length + 2, 5);
 
   for (const s of sections) {
-    if (!s.content) continue;
+    if (!s.content || s.content.length < 10) continue;
 
-    // Sub-heading for the knowledge point
+    // Heading for this knowledge point
     if (s.heading) {
-      newLines.push('');  // blank line before heading
+      newLines.push('');
       newLines.push(mdHeading(s.heading, leafLevel));
+      newLines.push('');
     }
 
-    // Knowledge point as bullet with source link
-    const cleanContent = s.content
-      .replace(/^["「]/g, '').replace(/["」]$/g, '')  // strip quotes
-      .replace(/\n+/g, ' ');  // single line
-    newLines.push(`- ${cleanContent} → [原文](${sourceUrl})`);
+    // Detailed content — preserve multi-line format
+    const body = s.content
+      .replace(/^["「]/g, '').replace(/["」]$/g, '')
+      .trim();
+    newLines.push(body);
+    newLines.push('');
+
+    // Source link
+    newLines.push(`> 📎 [查看对话原文](${sourceUrl})`);
+    newLines.push('');
+    newLines.push('---');
   }
 
   if (newLines.length === 0) return currentMd;
 
   // Insert at end of section
   let insertAt = section ? section.endIndex : lines.length;
+  // Remove trailing --- from last block
+  if (newLines[newLines.length - 1] === '---') {
+    newLines.pop();
+  }
   lines.splice(insertAt, 0, ...newLines);
   return lines.join('\n');
 }
