@@ -24,11 +24,11 @@
   "content_scripts": [
     {
       "matches": [
-        "https://chat.deepseek.com/*",
-        "https://kimi.moonshot.cn/*",
+        "https://*.deepseek.com/*",
+        "https://*.moonshot.cn/*",
         "https://chat.openai.com/*",
         "https://claude.ai/*",
-        "https://yuanbao.tencent.com/*",
+        "https://*.tencent.com/*",
         "https://tongyi.aliyun.com/*",
         "https://yiyan.baidu.com/*"
       ],
