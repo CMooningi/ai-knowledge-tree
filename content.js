@@ -1,5 +1,5 @@
 // AI Knowledge Tree — Content Script v3
-// Simple, robust extraction strategy
+console.log('[知识树] ✅ content script 已注入，当前页面:', window.location.href);
 
 const DEBUG = true;
 const log = (...args) => DEBUG && console.log('[知识树]', ...args);
