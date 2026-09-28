@@ -1,0 +1,14 @@
+---
+description: Project-wide maintenance and GitHub synchronization requested by the owner
+alwaysApply: true
+---
+
+# AI Knowledge Tree maintenance
+
+- Keep user workflows simple, lightweight and automatic. Avoid unnecessary dependencies.
+- After completing changes, run relevant checks (`npm test` for code), update README when behavior changes, and commit and push to the existing origin.
+- This synchronization preference applies to all subsequent edits in this project unless the user overrides it.
+- Inspect the working tree first. Preserve unrelated user changes and never force-push or discard work to resolve a conflict.
+- Never commit API keys, real conversations, exported personal notes, browser profiles, logs or temporary backups.
+- Do not make real paid model calls in automated tests. Use mock providers.
+- Report validation limits and any authentication or push failure honestly.

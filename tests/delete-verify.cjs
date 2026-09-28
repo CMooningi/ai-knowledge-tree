@@ -1,0 +1,20 @@
+const fs=require('fs'),vm=require('vm'),assert=require('assert/strict');
+const md='# Tree\n## A\n### Repeated\nfirst note\n### Repeated\nsecond note\n### B\n#### C\nlast leaf\n## Keep\nkeep body\n';
+const store={knowledge_tree_md:md};let listener;
+const ctx=vm.createContext({URL,console,chrome:{downloads:{onChanged:{addListener(){}}},runtime:{onMessage:{addListener(fn){listener=fn;}},onInstalled:{addListener(){}}},storage:{local:{async get(){return structuredClone(store);},async set(v){Object.assign(store,structuredClone(v));}}}}});
+ctx.importScripts=(...files)=>files.forEach(file=>vm.runInContext(fs.readFileSync(__dirname+'/../'+file,'utf8'),ctx));
+ctx.chrome.alarms={async create(){},async clear(){},onAlarm:{addListener(){}}};ctx.chrome.runtime.onStartup={addListener(){}};ctx.chrome.storage.onChanged={addListener(){}};vm.runInContext(fs.readFileSync(__dirname+'/../background.js','utf8'),ctx);
+const M=ctx.KnowledgeModel,A=vm.runInContext('TreeActions',ctx);
+const tree=M.parse(md),repeated=tree.nodes.filter(n=>n.title==='Repeated');
+const send=payload=>new Promise(resolve=>listener({type:'DELETE_NODE',payload},{},resolve));
+(async()=>{
+ store.knowledge_note_activity={[repeated[0].id]:{uid:'first'},[repeated[1].id]:{uid:'second'}};
+ let result=await send({baseMd:md,nodeId:repeated[0].id});assert.equal(result.status,'success');assert(!result.md.includes('first note'));assert(result.md.includes('second note'));assert(result.md.includes('keep body'));
+ assert.equal(store.knowledge_note_activity[repeated[0].id].uid,'second');assert(!store.knowledge_note_activity[repeated[1].id]);assert.equal(store.knowledge_tree_before_delete.md,md);
+ const after=store.knowledge_tree_md;result=await send({baseMd:md,nodeId:repeated[1].id});assert.equal(result.status,'error');assert.equal(store.knowledge_tree_md,after);
+ const branch=M.parse(after).nodes.find(n=>n.title==='B');result=await send({baseMd:after,nodeId:branch.id});assert.equal(result.status,'success');assert.equal(result.removed,2);assert(!result.md.includes('last leaf'));assert(result.md.includes('second note'));
+ assert.throws(()=>A.remove(result.md,{baseMd:result.md,nodeId:'nonexistent'}),/不存在/);
+ result=await send({baseMd:result.md,nodeId:'root'});assert.equal(result.status,'success');assert.equal(M.parse(result.md).nodes.length,1);assert.equal(Object.keys(store.knowledge_note_activity).length,0);
+ assert.throws(()=>ctx.NoteEditor.apply(md,{baseMd:md,nodeId:tree.nodes.find(n=>n.title==='A').id,title:'rename',content:'text'}),/最末级/);
+ console.log('PASS leaf/subtree/root deletion, duplicate-sibling metadata remap, unaffected notes, backup, stale snapshot rejection, directory edit rejection.');
+})().catch(e=>{console.error(e);process.exitCode=1;});

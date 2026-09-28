@@ -31,32 +31,23 @@ function updateUI(status) {
   // Update status dot
   const dot = document.getElementById('statusDot');
   const text = document.getElementById('statusText');
-  if (status.lastCapture && Date.now() - status.lastCapture < 60000) {
+  if(status.pendingError){
+    dot.classList.add('error');text.textContent='待处理：'+status.pendingError;
+  }else if(status.pendingCount){
+    text.textContent=`${status.pendingCount} 个对话${status.pendingPaused?'已暂存，自动整理已关闭':'已暂存，等待自动整理'}`;
+  }else if (status.lastCapture && Date.now() - status.lastCapture < 60000) {
     dot.classList.add('active');
     text.textContent = '最近已抓取';
   }
 }
 
 function setupButtons() {
-  document.getElementById('btnPreview').addEventListener('click', async () => {
-    const result = await chrome.runtime.sendMessage({ type: 'GET_TREE' });
-    if (result.md) {
-      const url = 'data:text/markdown;charset=utf-8,' + encodeURIComponent(result.md);
-      chrome.tabs.create({ url });
-    }
+  document.getElementById('btnPreview').addEventListener('click', () => {
+    chrome.tabs.create({ url: chrome.runtime.getURL('preview/preview.html') });
   });
-
   document.getElementById('btnExport').addEventListener('click', async () => {
-    const result = await chrome.runtime.sendMessage({ type: 'EXPORT_TREE' });
-    if (result.md) {
-      const url = 'data:text/markdown;charset=utf-8,' + encodeURIComponent(result.md);
-      const timestamp = new Date().toISOString().split('T')[0];
-      chrome.downloads.download({
-        url,
-        filename: `knowledge-tree-${timestamp}.md`,
-        saveAs: true
-      });
-    }
+    try{const result=await chrome.runtime.sendMessage({type:'DOWNLOAD_TREE'});if(result?.error)throw Error(result.error);}
+    catch(error){showToast('导出未完成：'+error.message);}
   });
 
   document.getElementById('btnCapture').addEventListener('click', async () => {
@@ -66,24 +57,15 @@ function setupButtons() {
 
     try {
       const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
-      const result = await chrome.tabs.sendMessage(tab.id, { type: 'MANUAL_CAPTURE' });
+      const response = await chrome.tabs.sendMessage(tab.id, { type: 'MANUAL_CAPTURE' });
 
-      if (!result) {
+      if (!response) {
         showToast('当前页面未检测到 AI 对话');
         return;
       }
 
-      // Send to background for processing
-      const response = await chrome.runtime.sendMessage({
-        type: 'CAPTURE_CONVERSATION',
-        payload: {
-          ...result,
-          newMessages: result.messages
-        }
-      });
-
       if (response.status === 'success') {
-        showToast(`✅ 新增 ${response.newPoints} 个知识点`);
+        showToast(`✅ 新增 ${response.newPoints} 篇笔记` + (response.updatedNotes ? `，更新 ${response.updatedNotes} 篇旧笔记` : '') + (response.reorganizedNotes ? `，自动归类 ${response.reorganizedNotes} 条旧笔记` : ''));
         loadStatus();
       } else if (response.status === 'skipped') {
         showToast(`⏭️ ${response.reason}`);
@@ -91,7 +73,9 @@ function setupButtons() {
         showToast(`❌ ${response.error || '未知错误'}`);
       }
     } catch (err) {
-      showToast(`❌ 抓取失败: ${err.message}`);
+      showToast(/Receiving end does not exist|Could not establish connection/i.test(err.message)
+        ? '❌ 请先重新加载扩展，再刷新支持的 AI 聊天页面'
+        : `❌ 抓取失败: ${err.message}`);
     } finally {
       btn.textContent = '📸 手动抓取';
       btn.disabled = false;

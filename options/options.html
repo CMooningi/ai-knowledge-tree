@@ -14,6 +14,31 @@
     </header>
 
     <section class="setting-group">
+      <h2>想收录哪些知识？</h2>
+      <p class="desc">填写你关注的主题，AI 判断符合其中任意一个，就可以收录。留空表示不限主题。</p>
+      <div class="form-item">
+        <label for="intakeTags">收录标签（任选其一匹配）</label>
+        <textarea id="intakeTags" rows="3" placeholder="例如：Python，Electron，人工智能&#10;支持逗号分隔或每行一个标签" aria-describedby="intakeHint"></textarea>
+        <span class="hint" id="intakeHint">按内容含义匹配，不要求对话逐字出现标签。修改标签不会删除已有笔记。</span>
+      </div>
+      <button class="btn btn-primary" id="btnSaveIntake">保存收录范围</button>
+      <div id="intakeResult" class="test-result" role="status" aria-live="polite"></div>
+    </section>
+
+    <section class="setting-group">
+      <h2>Jev 收录预审（可选）</h2>
+      <p class="desc">验证成功后，先由 Jev 判断是否需要收录，再由 DeepSeek 整理笔记。未配置或暂时不可用时自动使用 DeepSeek。</p>
+      <div class="form-item">
+        <label for="jevApiKey">TypeSafe 官方 API Key</label>
+        <div class="input-row"><input type="password" id="jevApiKey" autocomplete="off" placeholder="填写你的 TypeSafe API Key"><button class="btn-icon" id="btnToggleJevKey" aria-label="显示或隐藏 Jev 密钥">显示</button></div>
+        <span class="hint">在 <a href="https://console.typesafe.ai" target="_blank" rel="noopener noreferrer">TypeSafe 官方控制台</a> 获取；验证会发送一次简短测试请求。</span>
+      </div>
+      <button class="btn btn-primary" id="btnSaveJev">验证并保存</button>
+      <button class="btn btn-secondary" id="btnRemoveJev">移除 Jev 密钥</button>
+      <div class="test-result" id="jevResult" role="status" aria-live="polite"></div>
+    </section>
+
+    <section class="setting-group">
       <h2>DeepSeek API 配置</h2>
       <p class="desc">用于分析对话内容、归类知识点、去重。</p>
 
@@ -63,9 +88,11 @@
       <div class="form-item">
         <label class="toggle-label">
           <input type="checkbox" id="autoCapture" checked>
-          <span>自动检测并抓取 AI 学习对话</span>
+          <span>停止对话 5 分钟后自动整理；关闭标签页仍会处理，关闭浏览器后下次启动继续</span>
         </label>
       </div>
+
+      <p class="hint">输入、新消息或 AI 正在回答都会重新计时。页面需要保持打开；后台标签页可能稍晚执行。手动抓取无需等待。</p>
 
       <div class="form-item">
         <label class="toggle-label">
@@ -78,10 +105,10 @@
     </section>
 
     <footer>
-      <p>AI 知识树 v1.0 | <a href="https://github.com" target="_blank">GitHub</a></p>
+      <p>AI 知识树 v1.2.0</p>
     </footer>
   </div>
 
-  <script src="options.js"></script>
+  <script src="../intake-policy.js"></script><script src="options.js"></script>
 </body>
 </html>

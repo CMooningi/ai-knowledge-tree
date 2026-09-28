@@ -1,0 +1,22 @@
+<!doctype html>
+<html lang="zh-CN">
+<head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><title>知识树 · 阅读空间</title><link rel="stylesheet" href="preview.css"></head>
+<body>
+<aside><div class="brand"><span>🌳</span><div>AI 知识树<small>让每一次学习，都留下脉络</small></div></div>
+<label class="search"><span>⌕</span><input id="search" type="search" placeholder="搜索标题或正文" aria-label="搜索知识树"></label>
+<div class="tools"><span id="count">正在加载…</span><button id="collapse">收起目录</button></div>
+<button id="recent-updates" aria-pressed="false" title="最近 7 天更新的最新 10 篇笔记中，尚未阅读的内容">最近更新 · 0</button>
+<nav id="tree" aria-label="笔记目录与小节大纲"></nav><footer>右键条目可删除 · 最末级可编辑</footer></aside>
+<div id="resizer" role="separator" tabindex="0" aria-label="调整目录宽度" aria-orientation="vertical" aria-valuemin="220" aria-valuemax="480" aria-valuenow="300"></div>
+<main><header><nav id="crumbs" aria-label="当前位置"></nav><div class="header-actions"><button id="export">导出 Markdown</button></div></header>
+<div id="reader" tabindex="0" aria-label="知识目录与笔记正文"><article><p class="eyebrow">YOUR KNOWLEDGE, CONNECTED</p><h1 id="title">阅读空间</h1><p id="meta"></p><div id="body"></div><div id="children"></div></article></div>
+<div id="notice" role="status" aria-live="polite"></div></main>
+<dialog id="note-editor" aria-labelledby="editor-heading">
+<form id="note-form"><div class="editor-top"><div><h2 id="editor-heading">编辑笔记</h2><p id="editor-path"></p></div><button type="button" id="editor-close" aria-label="关闭编辑">✕</button></div>
+<label class="editor-label" for="note-title">标题</label><input id="note-title" maxlength="120" required autocomplete="off">
+<div class="editor-toolbar"><div class="editor-tabs"><button type="button" id="tab-write" aria-pressed="true">编辑</button><button type="button" id="tab-preview" aria-pressed="false">预览</button></div><div id="format-tools"><button type="button" id="format-heading" title="插入小标题">小标题</button><button type="button" id="format-star" title="标记重点">⭐ 重点</button><button type="button" id="format-code" title="插入代码块">代码</button></div></div>
+<label class="editor-label sr-only" for="note-content">Markdown 正文</label><textarea id="note-content" spellcheck="false" placeholder="写下你的理解，也可以使用 Markdown 小标题、列表和代码块…"></textarea><div id="note-preview" hidden></div>
+<p id="editor-error" role="alert"></p><div class="editor-bottom"><span id="editor-count"></span><span>原始来源保留 · 手动修改不会被 AI 自动总结覆盖</span></div>
+<div class="editor-actions"><span>Ctrl / ⌘ + S 保存</span><button type="button" id="editor-cancel">取消</button><button type="submit" id="editor-save">保存修改</button></div></form></dialog>
+<div id="node-menu" role="menu" aria-label="条目操作" hidden><div id="node-menu-title"></div><button id="node-menu-edit" role="menuitem">编辑笔记</button><button id="node-menu-delete" role="menuitem" class="danger">删除</button></div>
+<script src="model.js"></script><script src="editor-model.js"></script><script src="../note-activity.js"></script><script src="preview.js"></script><script src="editor.js"></script><script src="context-menu.js"></script></body></html>

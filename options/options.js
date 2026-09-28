@@ -11,7 +11,8 @@ async function loadSettings() {
     'deepseek_api_key',
     'deepseek_model',
     'auto_capture',
-    'notify_on_capture'
+    'notify_on_capture',
+    'intake_tags','jev_api_key','jev_verified','jev_status'
   ]);
 
   if (result.deepseek_api_key) {
@@ -22,6 +23,9 @@ async function loadSettings() {
   }
   document.getElementById('autoCapture').checked = result.auto_capture !== false;
   document.getElementById('notifyOnCapture').checked = result.notify_on_capture !== false;
+  document.getElementById('intakeTags').value = IntakePolicy.normalize(result.intake_tags).join('，');
+  document.getElementById('jevApiKey').value=result.jev_api_key||'';
+  showJevStatus(result.jev_status?.message||(result.jev_verified?'Jev 已启用':'未配置 Jev，当前使用 DeepSeek 审核'),result.jev_status?.state==='fallback');
 }
 
 async function loadTreeStats() {
@@ -35,6 +39,28 @@ async function loadTreeStats() {
 }
 
 function setupEventListeners() {
+  document.getElementById('btnToggleJevKey').addEventListener('click',()=>{const input=document.getElementById('jevApiKey');input.type=input.type==='password'?'text':'password';document.getElementById('btnToggleJevKey').textContent=input.type==='password'?'显示':'隐藏';});
+  document.getElementById('btnSaveJev').addEventListener('click',async()=>{
+    const button=document.getElementById('btnSaveJev'),remove=document.getElementById('btnRemoveJev');button.disabled=true;remove.disabled=true;showJevStatus('正在验证 Jev…');
+    try{const response=await chrome.runtime.sendMessage({type:'SAVE_JEV_KEY',key:document.getElementById('jevApiKey').value.trim()});if(response?.error||response?.status!=='success')throw Error(response?.error||'后台没有返回验证结果');showJevStatus('验证成功：已启用 Jev 收录预审');}
+    catch(error){showJevStatus(error.message+'；未更改已保存的配置',true);}
+    finally{button.disabled=false;remove.disabled=false;}
+  });
+  document.getElementById('btnRemoveJev').addEventListener('click',async()=>{
+    try{const response=await chrome.runtime.sendMessage({type:'REMOVE_JEV_KEY'});if(response?.error)throw Error(response.error);document.getElementById('jevApiKey').value='';showJevStatus('已移除 Jev 密钥，使用 DeepSeek 审核');}
+    catch(error){showJevStatus(error.message,true);}
+  });
+  chrome.storage.onChanged.addListener((changes,area)=>{if(area==='local'&&changes.jev_status){const status=changes.jev_status.newValue;showJevStatus(status?.message||'未配置 Jev，当前使用 DeepSeek 审核',status?.state==='fallback');}});
+  document.getElementById('btnSaveIntake').addEventListener('click',async()=>{
+    const result=document.getElementById('intakeResult');
+    try{
+      const tags=IntakePolicy.normalize(document.getElementById('intakeTags').value);
+      await chrome.storage.local.set({intake_tags:tags});
+      document.getElementById('intakeTags').value=tags.join('，');
+      result.textContent=tags.length?'已保存：符合任意一个标签的学习知识才会收录。':'已保存：不限主题，由 AI 判断是否值得记录。';
+      result.className='test-result success';
+    }catch(error){result.textContent=error.message;result.className='test-result error';}
+  });
   document.getElementById('backLink').addEventListener('click', (e) => {
     e.preventDefault();
     window.close();
@@ -94,26 +120,13 @@ function setupEventListeners() {
   });
 
   // View tree
-  document.getElementById('btnViewTree').addEventListener('click', async () => {
-    const result = await chrome.runtime.sendMessage({ type: 'GET_TREE' });
-    if (result.md) {
-      const url = 'data:text/markdown;charset=utf-8,' + encodeURIComponent(result.md);
-      chrome.tabs.create({ url });
-    }
+  document.getElementById('btnViewTree').addEventListener('click', () => {
+    chrome.tabs.create({ url: chrome.runtime.getURL('preview/preview.html') });
   });
-
   // Export tree
   document.getElementById('btnExportTree').addEventListener('click', async () => {
-    const result = await chrome.runtime.sendMessage({ type: 'EXPORT_TREE' });
-    if (result.md) {
-      const url = 'data:text/markdown;charset=utf-8,' + encodeURIComponent(result.md);
-      const timestamp = new Date().toISOString().split('T')[0];
-      chrome.downloads.download({
-        url,
-        filename: `knowledge-tree-${timestamp}.md`,
-        saveAs: true
-      });
-    }
+    try{const result=await chrome.runtime.sendMessage({type:'DOWNLOAD_TREE'});if(result?.error)throw Error(result.error);}
+    catch(error){showTestResult('导出未完成：'+error.message,'error');}
   });
 
   // Clear tree
@@ -140,3 +153,4 @@ function showTestResult(message, type) {
   el.textContent = message;
   el.className = 'test-result ' + type;
 }
+function showJevStatus(message,error=false){const el=document.getElementById('jevResult');el.textContent=message;el.className='test-result '+(error?'error':'success');}

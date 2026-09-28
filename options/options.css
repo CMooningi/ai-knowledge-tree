@@ -216,3 +216,4 @@ footer a {
   color: #10a37f;
   text-decoration: none;
 }
+#intakeTags{width:100%;box-sizing:border-box;padding:12px;border:1px solid #d4ddd8;border-radius:8px;font:inherit;font-size:14px;line-height:1.8;resize:vertical;min-height:96px;color:#263c35;background:#fff}#intakeTags:focus{outline:2px solid #10a37f;outline-offset:2px}

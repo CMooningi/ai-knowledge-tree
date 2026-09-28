@@ -1,0 +1,51 @@
+const fs=require('node:fs'),vm=require('node:vm'),assert=require('node:assert/strict');
+const store={},requests=[],answers=[];let listener;
+const ctx=vm.createContext({URL,TextEncoder,structuredClone,crypto:require('node:crypto').webcrypto,console,
+ chrome:{downloads:{onChanged:{addListener(){}},async search(){return [];}},storage:{local:{async get(){return {...store,deepseek_api_key:'test-only'};},async set(v){Object.assign(store,v);},async remove(keys){keys.forEach(k=>delete store[k]);}}},runtime:{onMessage:{addListener(fn){listener=fn;}},onInstalled:{addListener(){}}}},
+ fetch:async(url,options)=>{requests.push(JSON.parse(options.body));assert(answers.length,'unexpected model call');return {ok:true,json:async()=>({choices:[{finish_reason:'stop',message:{content:JSON.stringify(answers.shift())}}]})};}
+});
+ctx.importScripts=(...files)=>files.forEach(file=>vm.runInContext(fs.readFileSync(__dirname+'/../'+file,'utf8'),ctx));
+ctx.chrome.alarms={async create(){},async clear(){},onAlarm:{addListener(){}}};ctx.chrome.runtime.onStartup={addListener(){}};ctx.chrome.storage.onChanged={addListener(){}};vm.runInContext(fs.readFileSync(__dirname+'/../background.js','utf8'),ctx);
+const send=msg=>new Promise(resolve=>listener(msg,{},resolve));
+const classification={is_learning:true,technology:'Python',hierarchy:['Python'],related_ids:[],needs_full_context:false};
+const firstText='Python 列表是可变的有序序列，可以通过索引访问其中的元素。';
+const payload={url:'https://example.test/chat',messages:[{role:'user',content:'解释 Python 列表'},{role:'assistant',content:firstText,headings:['列表的概念']}]};
+const capture=()=>send({type:'CAPTURE_CONVERSATION',payload});
+(async()=>{
+ answers.push(classification,{sections:[{heading:'列表',content:firstText,evidence:'列表是可变的有序序列',replaces:[]}]},{placements:[{index:0,path:['Python']}],moves:[],summary:''});
+ assert.equal((await capture()).status,'success');
+ assert(!requests[0].messages[1].content.includes(firstText));
+ assert(requests[0].messages[1].content.includes('列表的概念'));
+ assert(requests[1].messages[1].content.includes(firstText));
+ assert.equal((await capture()).status,'skipped');assert.equal(requests.length,3);
+ const T=vm.runInContext('Taxonomy',ctx),note=T.snapshot(store.knowledge_tree_md).records.find(r=>r.node.title==='列表');
+ const newText='Python 列表的 append 方法将一个元素添加到末尾，它会修改原列表。';
+ payload.messages.push({role:'user',content:'如何增加元素？'},{role:'assistant',content:newText,headings:[]});
+ answers.push({...classification,related_ids:[note.id]},{sections:[{heading:'列表',content:firstText+'\n\n'+newText,evidence:'append 方法将一个元素添加到末尾',replaces:[note.id]}]},{placements:[{index:0,path:['Python']}],moves:[],summary:''});
+ const result=await capture();assert.equal(result.status,'success');assert.equal(result.updatedNotes,1);
+ const tree=T.snapshot(store.knowledge_tree_md);assert.equal(tree.records.filter(r=>r.node.title==='列表').length,1);
+ assert(store.knowledge_tree_md.includes(firstText));assert(store.knowledge_tree_md.includes(newText));
+ assert(store.knowledge_tree_before_reorganization);
+ const currentNote=tree.records.find(r=>r.node.title==='列表'),entry=store.knowledge_note_activity[currentNote.node.id];
+ assert(entry.updatedAt>0);assert.equal(entry.days.length,1);
+ entry.days=['2020-01-01'];const updatedAt=entry.updatedAt;
+ const reviewText='复习：Python 列表的 append 方法会修改原列表并在末尾添加元素。';
+ payload.messages.push({role:'user',content:'再复习一下 append'},{role:'assistant',content:reviewText,headings:[]});
+ answers.push({...classification,related_ids:[currentNote.id]},{sections:[],revisited:[{id:currentNote.id,evidence:'append 方法会修改原列表并在末尾添加元素'}]});
+ assert.equal((await capture()).status,'skipped');
+ assert.equal(store.knowledge_note_activity[currentNote.node.id].days.length,2);
+ assert.equal(store.knowledge_note_activity[currentNote.node.id].updatedAt,updatedAt,'review must not recreate green dot');
+ const requestCount=requests.length;await capture();assert.equal(requests.length,requestCount);assert.equal(store.knowledge_note_activity[currentNote.node.id].days.length,2);
+ payload.messages.push({role:'user',content:'谢谢'},{role:'assistant',content:'不用谢，很高兴能帮你学习，祝你学习顺利。'});
+ answers.push(classification,{sections:[],revisited:[{id:currentNote.id,evidence:reviewText}]});
+ await capture();assert.equal(store.knowledge_note_activity[currentNote.node.id].days.length,2);
+ await send({type:'CLEAR_TREE'});assert.equal(store.capture_checkpoints_v1,undefined);
+ const pending=vm.runInContext('PendingCaptures',ctx);
+ const autoPayload={...payload,url:'https://example.test/closed-tab',messages:payload.messages.slice(0,2)};
+ await send({type:'CACHE_CONVERSATION',payload:autoPayload,activityAt:Date.now()-300001});
+ assert.equal(Object.keys(store[pending.key]).length,1);
+ answers.push(classification,{sections:[{heading:'列表',content:firstText,evidence:'列表是可变的有序序列',replaces:[]}]},{placements:[{index:0,path:['Python']}],moves:[],summary:''});
+ await pending.drain();assert.equal(Object.keys(store[pending.key]).length,0);assert(store.knowledge_tree_md.includes(firstText));
+ const afterAuto=requests.length;await send({type:'CACHE_CONVERSATION',payload:autoPayload,activityAt:Date.now()});assert.equal(Object.keys(store[pending.key]).length,0);assert.equal(requests.length,afterAuto);
+ console.log('PASS: real pipeline title-only classification, grounded extraction, atomic checkpoint, same-source incremental merge, backup, clear reset.');
+})().catch(e=>{console.error(e);process.exitCode=1;});
