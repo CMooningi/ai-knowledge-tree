@@ -217,3 +217,5 @@ footer a {
   text-decoration: none;
 }
 #intakeTags{width:100%;box-sizing:border-box;padding:12px;border:1px solid #d4ddd8;border-radius:8px;font:inherit;font-size:14px;line-height:1.8;resize:vertical;min-height:96px;color:#263c35;background:#fff}#intakeTags:focus{outline:2px solid #10a37f;outline-offset:2px}
+
+.form-item[hidden]{display:none}.form-item>select,.form-item>input[type="text"]{width:100%}.btn:disabled{opacity:.6;cursor:wait}

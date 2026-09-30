@@ -9,7 +9,8 @@ function runtime(store={},clock={now:1000000},handler=async()=>({status:'success
     runtime:{onStartup:{addListener(fn){events.startup=fn;}}},
     alarms:{async create(name,info){alarms.set(name,info);},async clear(name){alarms.delete(name);},onAlarm:{addListener(fn){events.alarm=fn;}}}
   }});
-  for(const file of ['capture-state.js','pending-captures.js'])vm.runInContext(fs.readFileSync(__dirname+'/../'+file,'utf8'),ctx);
+  for(const file of ['dev-log.js','model-config.js','capture-state.js','pending-captures.js'])vm.runInContext(fs.readFileSync(__dirname+'/../'+file,'utf8'),ctx);
+  ctx.console={...console,log(){},warn(){},groupCollapsed(){},groupEnd(){}};
   const pending=vm.runInContext('PendingCaptures',ctx);
   pending.init(async(payload,guard,commit)=>{calls.push(payload);await guard();return handler(payload,guard,commit);});
   return {pending,store,clock,calls,alarms,events,ctx,failWrite(v){failWrite=v;}};

@@ -2,7 +2,7 @@
 
 把与 AI 的学习对话整理成自己的 Markdown 知识库。正常聊天，停下来后自动归纳；按技术组织目录，在浏览器中阅读，需要时导出。
 
-**版本 1.2.0 · Chrome / Edge Manifest V3 · 原生 JavaScript · MIT**
+**版本 1.3.0 · Chrome / Edge Manifest V3 · 原生 JavaScript · MIT**
 
 设计原则：**简单、轻量、高效、省事**。无需部署服务器、数据库或额外笔记服务。
 
@@ -15,7 +15,7 @@
 - **动态调整目录**：新学 Python 2 时，可把明确属于 Python 3 的旧内容迁移到 `Python / Python 3`；通用内容不强行猜版本。
 - **增量和去重**：本地指纹识别新增、修改的消息，模型再与相关旧笔记核对、合并或补充。
 - **标签筛选**：匹配任意一个标签即可收录，留空则不限制学习主题。
-- **可选 Jev 预审**：验证 TypeSafe Key 后启用 Jev 审核；DeepSeek 继续负责分类、总结和目录调整。
+- **可选 Jev 预审**：验证 TypeSafe Key 后启用 Jev 审核；笔记模型继续负责分类、总结和目录调整。
 - **阅读与管理**：上层目录卡片导航，末端主题连续阅读和大纲跳转；右键节点删除，右键末端知识点编辑。
 - **学习标记**：近期内容用绿色标记，重复学习用星标层级表示，避免目录充满不同颜色。
 - **导出 Markdown**：带知识结构和来源链接，可用 Typora 等阅读器打开。
@@ -45,19 +45,44 @@ cd ai-knowledge-tree
 
 点击扩展图标 →「设置」。
 
-### DeepSeek（必需）
+### 笔记整理模型（必需，选择一个渠道）
+
+**DeepSeek 官方：**
 
 1. 在 [DeepSeek 开放平台](https://platform.deepseek.com/) 获取自己的 API Key。
 2. 填入扩展设置，选择模型，点击「保存配置」。默认模型为 `deepseek-chat`。
 3. 点击「测试连接」，确认账号、密钥和网络可用。
 
-### Jev（可选）
+**OpenRouter：**
 
-1. 通过 [TypeSafe 官方文档](https://docs.typesafe.ai/introduction/quickstart) 获取账号与 API Key。
+1. 在 [OpenRouter Keys](https://openrouter.ai/settings/keys) 创建 API Key。
+2. 在「笔记整理模型」里将调用渠道改为「OpenRouter」。
+3. 填写 OpenRouter Key，从模型页面复制完整的文本模型 ID；需要支持 JSON 输出。
+4. 点击「测试连接」验证实际模型调用及 JSON 输出，再点击「保存配置」启用。
+
+两种渠道的密钥与模型分别保存，切换填写区域不会立即改变后台使用的配置。测试会发送一次简短的真实模型请求，可能产生少量费用；测试成功不会自动保存。原有用户默认继续使用 DeepSeek，不需要迁移已有配置。
+
+### Jev（可选，TypeSafe 或 OpenRouter）
+
+1. 选择「TypeSafe 官方」时，通过 [TypeSafe 官方文档](https://docs.typesafe.ai/introduction/quickstart) 获取账号与 API Key。
 2. 在 Jev 设置区域填写 TypeSafe API Key，点击「验证并保存」。
 3. 验证成功后启用收录预审；可随时移除 Jev 密钥。
 
-Jev 使用 `jev-latest`，接口为 `https://api.typesafe.ai/v1/systemone`。未配置、判断不确定或接口不可用时，交给 DeepSeek 继续审核；Jev 暂时失败会进入冷却，避免持续请求。**Jev 不能替代用于写笔记的 DeepSeek Key。**
+使用 OpenRouter 调用 Jev：
+
+1. 在「Jev 收录预审」把渠道改为「OpenRouter」。
+2. 填写 OpenRouter API Key，默认 Jev 模型为 `typesafe/jev-1.13`；也可以填写 `~typesafe/jev-latest`。
+3. 点击「验证并保存」。验证成功才切换实际渠道；验证失败保留原配置。
+
+Jev 使用独立的决策接口，不是普通聊天模型：
+
+- TypeSafe 官方：`POST https://api.typesafe.ai/v1/systemone`，模型 `jev-latest`。
+- OpenRouter：`POST https://openrouter.ai/api/alpha/decisions`，模型 `typesafe/jev-1.13`。
+- OpenRouter 笔记生成：`POST https://openrouter.ai/api/v1/chat/completions`，使用你填写的文本模型。
+
+接口依据：[OpenRouter Jev 教程](https://openrouter.ai/docs/guides/community/jev-tutorial)、[OpenRouter API](https://openrouter.ai/docs/api/reference/overview)。
+
+未配置 Jev、判断不确定或接口不可用时，由**当前所选的笔记模型渠道**继续审核；Jev 暂时失败会进入冷却。两处都选 OpenRouter 时，预审和笔记调用都通过 OpenRouter，无需 TypeSafe 或 DeepSeek 官方 Key。Jev 只做决策，不能代替生成笔记的文本模型。
 
 ### 收录标签
 
@@ -145,7 +170,7 @@ flowchart TD
     E -->|有变化| F{Jev 已启用?}
     F -->|是| G[问题与回答标题预审]
     G -->|明确拒绝| H[记录进度 / 清理对应缓存]
-    G -->|接收或不确定| I[DeepSeek 分类 / 查找相关旧笔记]
+    G -->|接收或不确定| I[笔记模型分类 / 查找相关旧笔记]
     F -->|否| I
     I -->|无需收录| H
     I -->|需要整理| J[新增正文 + 必要前文 + 相关旧笔记]
@@ -167,8 +192,8 @@ flowchart TD
 费用取决于执行路径：
 
 - 本地缓存、计时、未变化对话跳过：不消耗模型 Token。
-- 启用 Jev：通常增加一次简短预审；明确拒绝时省去后续 DeepSeek 请求。
-- 正常新增笔记：通常是 DeepSeek 分类、总结、目录规划三步；提前拒绝或没有新增时可提前结束。
+- 启用 Jev：通常增加一次简短预审；明确拒绝时省去后续笔记模型请求。
+- 正常新增笔记：通常是笔记模型分类、总结、目录规划三步；提前拒绝或没有新增时可提前结束。
 - 长对话纠错、要求更多前文、相关笔记很多：输入 Token 会增加。
 - 失败重试可能产生额外费用，不能保证失败请求免费。
 
@@ -198,7 +223,7 @@ API Key 保存在扩展本地存储中，**不是额外加密的密码保险库*
 
 - 缓存本身不调用模型。
 - Jev 接收预审用的问题、回答标题和标签。
-- DeepSeek 根据步骤接收问题、标题、目录，以及总结需要的对话正文和相关旧笔记。
+- 所选笔记模型服务根据步骤接收问题、标题、目录，以及总结需要的对话正文和相关旧笔记；选择 OpenRouter 时会经 OpenRouter 转发给模型提供方。
 - API Key 仅用于对应服务认证。
 - 项目没有自己的云端笔记服务器，也不会把个人笔记自动上传 GitHub。
 
@@ -208,7 +233,7 @@ API Key 保存在扩展本地存储中，**不是额外加密的密码保险库*
 - `alarms`：标签页关闭后的到期任务调度。
 - `activeTab`：当前页面的手动抓取交互。
 - `downloads`：导出及确认下载是否完成。
-- DeepSeek / TypeSafe 域名：模型调用。
+- DeepSeek / TypeSafe / OpenRouter 域名：模型调用。
 - 聊天网站匹配范围：注入消息提取脚本。
 
 ## 常见问题
@@ -219,7 +244,7 @@ API Key 保存在扩展本地存储中，**不是额外加密的密码保险库*
 
 ### 超过五分钟没有笔记
 
-检查自动抓取开关、是否仍在输入或生成、DeepSeek Key、标签范围和浏览器运行状态。打开弹窗看待处理错误。后台调度可能延迟，也可能已判断无需收录。
+检查自动抓取开关、是否仍在输入或生成、笔记模型 Key、标签范围和浏览器运行状态。打开弹窗看待处理错误。后台调度可能延迟，也可能已判断无需收录。
 
 ### 重复抓取没有新增
 
@@ -237,6 +262,47 @@ git pull --ff-only
 
 在扩展管理页点击重新加载，再刷新聊天页与预览页。不需要卸载。更新前建议导出笔记备份。
 
+## 开发者日志
+
+日志只写入**扩展后台 Service Worker 的开发者控制台**，不显示在普通弹窗或阅读页，不保存到扩展存储，也不上传日志服务器。
+
+查看方法：
+
+1. 打开 `chrome://extensions`（Edge 使用 `edge://extensions`），开启开发者模式。
+2. 找到「AI 知识树」，点击「Service Worker」或「检查视图」链接。
+3. 进入 **Console**，按 `[知识树]` 过滤；需要时打开 Preserve log。
+4. 执行手动抓取或模型测试，展开对应的折叠日志组。
+
+每个任务有独立编号，每次 API 调用还有请求编号与父任务编号。日志包括：
+
+- 缓存完成、自动处理到期、失败保留与延后重试。
+- 本地增量判断、Jev 未启用或冷却、判断为跳过/继续/低置信度复核。
+- 所选渠道、模型、请求地址、请求体、HTTP 状态、原始返回值、解析结果和耗时。
+- 服务返回的 Token 用量或 cost 字段（服务未返回时不虚构数值）。
+- 总结、分层、写入或跳过的执行路径，以及错误和回退原因。
+
+示例顺序：
+
+```text
+[知识树][任务编号] ════ 开始：手动抓取
+  01 检查本地增量
+  02 找到新增或修改的消息
+  调用 API：Jev 预审/验证 → 对应请求编号
+    请求体 / HTTP 返回 / API 原始返回值
+  Jev 决策 → 进入笔记模型分类
+  03 轻量分类 → 只发送问题和回答标题
+  04 总结与去重 → 新增正文和相关旧笔记
+  05 自动分层
+  06 校验完成 → 保存知识树
+[知识树][任务编号] ════ 结束：已写入知识树
+```
+
+认证头不记录，已知 API Key 与常见凭据字段会脱敏。请求/返回正文仍可能包含个人对话和笔记，分享控制台内容前请自行检查。非 JSON 错误响应最多记录 8000 字符；日志分组即时关闭，避免并发请求混在同一个展开组里。
+
+## 待实现需求
+
+[项目待办 / 持久需求记忆](docs/TODO.md) 已记录「网页总结模式」与「高级设置按网站覆盖全局选项」：每站可跟随全局、使用网页总结或使用 API 总结。**这些选项本版本尚未实现**，当前仍按已有的后台 API 流程工作。
+
 ## 开发与测试
 
 原生 HTML / CSS / JavaScript，无运行时 npm 依赖，无构建步骤。
@@ -245,6 +311,9 @@ git pull --ff-only
 ai-knowledge-tree/
 ├── manifest.json          权限与页面注入范围
 ├── content.js             页面提取、生成检测、活动与缓存上报
+├── dev-log.js             开发者日志分组、关联与密钥脱敏
+├── model-config.js        渠道、端点、模型与凭据选择
+├── model-transport.js     API 请求、返回、超时与错误日志
 ├── pending-captures.js     持久缓存、后台闹钟、恢复、重试、版本保护
 ├── background.js          消息路由与串行知识树写入
 ├── capture-state.js       消息指纹与增量上下文
@@ -268,7 +337,7 @@ ai-knowledge-tree/
 npm test
 ```
 
-测试使用模拟 Chrome API、DOM、时钟和模型响应，不用真实 Key，不消费 Token。覆盖增量、标签、Jev 回退、缓存恢复、计时重试、学习标记、编辑删除、菜单和阅读器行为。
+测试使用模拟 Chrome API、DOM、时钟和模型响应，不用真实 Key，不消费 Token。覆盖增量、标签、Jev 回退、OpenRouter 路由与密钥隔离、日志脱敏、配置交互、缓存恢复、计时重试、学习标记、编辑删除、菜单和阅读器行为。
 
 自动化测试不替代真实网站联调。建议手动验收：
 

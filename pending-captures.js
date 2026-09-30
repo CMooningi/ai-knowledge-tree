@@ -44,7 +44,7 @@ const PendingCaptures = (() => {
   }
   async function cache(payload, activityAt) {
     return serial(async()=>{
-      const settings=await chrome.storage.local.get(['auto_capture','intake_tags','jev_api_key','jev_verified']);
+      const settings=await chrome.storage.local.get(['auto_capture','intake_tags',...ModelConfig.jevKeys]);
       if(settings.auto_capture===false)return {status:'skipped'};
       const id=await sourceKey(payload.url), records=await read(), old=records[id];
       const now=Date.now(), at=Math.min(now,Number(activityAt)||now);
@@ -65,6 +65,7 @@ const PendingCaptures = (() => {
       const lastActivity=old && signature===old.signature ? Math.max(old.lastActivity,at) : at;
       records[id]={payload:value,signature,lastActivity,revision:crypto.randomUUID(),retryAt:0,attempts:0,error:''};
       await chrome.storage.local.set({[key]:records,pending_capture_error:''});
+      DevLog.event('缓存','完整对话已在本地暂存',{messageCount:value.messages.length,dueAt:lastActivity+idleMs});
       await schedule(records); return {status:'cached'};
     }).catch(async error=>{
       await chrome.storage.local.set({pending_capture_error:'对话缓存失败：'+error.message}).catch(()=>{});
@@ -78,6 +79,7 @@ const PendingCaptures = (() => {
     }
   }
   async function process(id, record) {
+    DevLog.event('调度','空闲到期 → 开始处理缓存',{cacheId:id.slice(0,12),attempt:(record.attempts||0)+1});
     try {
       await runCapture(record.payload,
         ()=>valid(id,record.revision),
@@ -87,12 +89,14 @@ const PendingCaptures = (() => {
         if(records[id]?.revision===record.revision){delete records[id];await chrome.storage.local.set({[key]:records});}
       });
     } catch(error) {
+      if(error.name==='PendingSuperseded')DevLog.event('调度','对话继续或配置改变 → 旧任务让路',{});
       if(error.name!=='PendingSuperseded')await serial(async()=>{
         const records=await read(), current=records[id];
         if(current?.revision!==record.revision)return;
         current.attempts=(current.attempts||0)+1;
         current.retryAt=Date.now()+Math.min(60,5*2**Math.min(current.attempts-1,4))*60000;
         current.error=error.message;
+        DevLog.event('调度','处理失败 → 保留缓存并延后重试',{cacheId:id.slice(0,12),retryAt:current.retryAt,error:error.message});
         await chrome.storage.local.set({[key]:records});
       });
     } finally {

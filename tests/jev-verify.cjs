@@ -5,7 +5,7 @@ const ctx=vm.createContext({URL,TextEncoder,AbortController,setTimeout,clearTime
  fetch:async(url,options)=>{requests.push({url,body:JSON.parse(options.body)});assert(answers.length,'unexpected request');const answer=answers.shift();if(answer.error)return {ok:false,status:answer.error};return {ok:true,json:async()=>url.includes('typesafe')?answer:({choices:[{finish_reason:'stop',message:{content:JSON.stringify(answer)}}]})};}
 });
 ctx.importScripts=(...files)=>files.forEach(file=>vm.runInContext(fs.readFileSync(__dirname+'/../'+file,'utf8'),ctx));
-ctx.chrome.alarms={async create(){},async clear(){},onAlarm:{addListener(){}}};ctx.chrome.runtime.onStartup={addListener(){}};ctx.chrome.storage.onChanged={addListener(){}};vm.runInContext(fs.readFileSync(__dirname+'/../background.js','utf8'),ctx);
+ctx.chrome.alarms={async create(){},async clear(){},onAlarm:{addListener(){}}};ctx.chrome.runtime.onStartup={addListener(){}};ctx.chrome.storage.onChanged={addListener(){}};Object.assign(ctx,{AbortController,setTimeout,clearTimeout});ctx.console={...console,log(){},warn(){},groupCollapsed(){},groupEnd(){}};vm.runInContext(fs.readFileSync(__dirname+'/../background.js','utf8'),ctx);
 const send=msg=>new Promise(resolve=>listener(msg,{},resolve));
 const choice=(value,confidence=1)=>({answers:{intake:{type:'choice',choice:value,confidence,probabilities:{[value]:confidence}}}});
 const payload={url:'https://example.test/jev',messages:[{role:'user',content:'Tell me about Python lists'},{role:'assistant',content:'Python lists are mutable ordered collections of values.',headings:['Python lists']}]};

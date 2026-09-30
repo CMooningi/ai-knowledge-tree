@@ -1,0 +1,22 @@
+const fs=require('node:fs'),vm=require('node:vm'),assert=require('node:assert/strict');
+const html=fs.readFileSync(__dirname+'/../options/options.html','utf8'),ids=[...html.matchAll(/\bid="([^"]+)"/g)].map(m=>m[1]);assert.equal(new Set(ids).size,ids.length);
+const elements=Object.fromEntries(ids.map(id=>[id,{value:'',type:'password',hidden:false,disabled:false,textContent:'',events:{},addEventListener(name,fn){this.events[name]=fn;}}]));
+const get=id=>{assert(elements[id],'missing DOM ID: '+id);return elements[id];};
+const store={deepseek_api_key:'official-key',deepseek_model:'deepseek-chat',jev_api_key:'official-jev',openrouter_api_key:'router-key',openrouter_model:'example/json-model',jev_openrouter_api_key:'router-jev',jev_openrouter_model:'typesafe/jev-1.13'};
+const sent=[];let fail=false;
+const ctx=vm.createContext({console,document:{getElementById:get,addEventListener(){}},window:{close(){}},chrome:{storage:{local:{async get(){return structuredClone(store);},async set(v){Object.assign(store,v);}},onChanged:{addListener(){}}},runtime:{async sendMessage(msg){sent.push(msg);return fail?{status:'error',error:'test rejection'}:{status:'success',md:'# tree'};}},tabs:{create(){}}}});
+for(const file of ['intake-policy.js','options/options.js'])vm.runInContext(fs.readFileSync(__dirname+'/../'+file,'utf8'),ctx);
+const change=async(id,value)=>{get(id).value=value;await get(id).events.change();};
+(async()=>{
+ await vm.runInContext('loadSettings()',ctx);vm.runInContext('setupEventListeners()',ctx);
+ assert.equal(get('apiKey').value,'official-key');assert.equal(get('jevApiKey').value,'official-jev');assert.equal(get('openrouterModelRow').hidden,true);
+ await change('llmProvider','openrouter');assert.equal(get('apiKey').value,'router-key');assert.equal(get('openrouterModelRow').hidden,false);assert.equal(sent.length,0,'changing picker must not save or call API');
+ get('apiKey').value='edited-router-key';await change('llmProvider','deepseek');assert.equal(get('apiKey').value,'official-key');await change('llmProvider','openrouter');assert.equal(get('apiKey').value,'edited-router-key','unsaved drafts survive switches without mixing');
+ await get('btnTestKey').events.click();assert.equal(sent.at(-1).type,'TEST_LLM_CONFIG');assert.equal(sent.at(-1).provider,'openrouter');assert.equal(sent.at(-1).key,'edited-router-key');assert.equal(get('btnSaveKey').disabled,false);
+ await get('btnSaveKey').events.click();assert.equal(sent.at(-1).type,'SAVE_LLM_CONFIG');assert.equal(sent.at(-1).model,'example/json-model');
+ await change('jevProvider','openrouter');assert.equal(get('jevApiKey').value,'router-jev');assert.equal(get('jevModelRow').hidden,false);await get('btnSaveJev').events.click();assert.equal(sent.at(-1).provider,'openrouter');assert.equal(sent.at(-1).model,'typesafe/jev-1.13');
+ fail=true;await get('btnSaveJev').events.click();assert(get('jevResult').textContent.includes('未更改'));assert.equal(get('jevProvider').disabled,false);fail=false;
+ await get('btnRemoveJev').events.click();await change('jevProvider','typesafe');assert.equal(get('jevApiKey').value,'');
+ assert(!html.includes('页面需要保持打开'));assert(!html.includes('网页总结模式'),'deferred feature must not appear as implemented');
+ console.log('PASS settings DOM, provider-specific keys/drafts, unchanged legacy defaults, no auto-save on picker changes, OpenRouter model fields, test/save routes, failed verification and remove flow.');
+})().catch(error=>{console.error(error);process.exitCode=1;});

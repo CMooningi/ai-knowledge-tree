@@ -5,7 +5,7 @@ const ctx=vm.createContext({URL,TextEncoder,structuredClone,crypto:require('node
  fetch:async(url,options)=>{requests.push(JSON.parse(options.body));assert(answers.length,'unexpected LLM call');if(changeDuringRequest){store.intake_tags=['changed'];changeDuringRequest=false;}return {ok:true,json:async()=>({choices:[{finish_reason:'stop',message:{content:JSON.stringify(answers.shift())}}]})};}
 });
 ctx.importScripts=(...files)=>files.forEach(file=>vm.runInContext(fs.readFileSync(__dirname+'/../'+file,'utf8'),ctx));
-ctx.chrome.alarms={async create(){},async clear(){},onAlarm:{addListener(){}}};ctx.chrome.runtime.onStartup={addListener(){}};ctx.chrome.storage.onChanged={addListener(){}};vm.runInContext(fs.readFileSync(__dirname+'/../background.js','utf8'),ctx);
+ctx.chrome.alarms={async create(){},async clear(){},onAlarm:{addListener(){}}};ctx.chrome.runtime.onStartup={addListener(){}};ctx.chrome.storage.onChanged={addListener(){}};Object.assign(ctx,{AbortController,setTimeout,clearTimeout});ctx.console={...console,log(){},warn(){},groupCollapsed(){},groupEnd(){}};vm.runInContext(fs.readFileSync(__dirname+'/../background.js','utf8'),ctx);
 const send=msg=>new Promise(resolve=>listener(msg,{},resolve));
 const evidence='列表是一种可变的有序序列，支持索引访问和追加元素。';
 const payload={url:'https://example.test/intake',messages:[{role:'user',content:'讲讲 Python 列表'},{role:'assistant',content:evidence,headings:['列表用法']}]};

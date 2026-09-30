@@ -5,7 +5,7 @@ const ctx=vm.createContext({URL,TextEncoder,structuredClone,crypto:require('node
  fetch:async(url,options)=>{requests.push(JSON.parse(options.body));assert(answers.length,'unexpected model call');return {ok:true,json:async()=>({choices:[{finish_reason:'stop',message:{content:JSON.stringify(answers.shift())}}]})};}
 });
 ctx.importScripts=(...files)=>files.forEach(file=>vm.runInContext(fs.readFileSync(__dirname+'/../'+file,'utf8'),ctx));
-ctx.chrome.alarms={async create(){},async clear(){},onAlarm:{addListener(){}}};ctx.chrome.runtime.onStartup={addListener(){}};ctx.chrome.storage.onChanged={addListener(){}};vm.runInContext(fs.readFileSync(__dirname+'/../background.js','utf8'),ctx);
+ctx.chrome.alarms={async create(){},async clear(){},onAlarm:{addListener(){}}};ctx.chrome.runtime.onStartup={addListener(){}};ctx.chrome.storage.onChanged={addListener(){}};Object.assign(ctx,{AbortController,setTimeout,clearTimeout});ctx.console={...console,log(){},warn(){},groupCollapsed(){},groupEnd(){}};vm.runInContext(fs.readFileSync(__dirname+'/../background.js','utf8'),ctx);
 const send=msg=>new Promise(resolve=>listener(msg,{},resolve));
 const classification={is_learning:true,technology:'Python',hierarchy:['Python'],related_ids:[],needs_full_context:false};
 const firstText='Python 列表是可变的有序序列，可以通过索引访问其中的元素。';

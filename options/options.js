@@ -1,4 +1,46 @@
 // AI Knowledge Tree — Options Page Script
+const providerDrafts={llm:{},jev:{}};
+let visibleLlm='deepseek',visibleJev='typesafe';
+function rememberProvider(kind){
+  if(kind==='llm')providerDrafts.llm[visibleLlm]={key:document.getElementById('apiKey').value,model:document.getElementById(visibleLlm==='openrouter'?'openrouterModel':'modelSelect').value};
+  else providerDrafts.jev[visibleJev]={key:document.getElementById('jevApiKey').value,model:document.getElementById('jevModel').value};
+}
+function renderProvider(kind){
+  if(kind==='llm'){
+    visibleLlm=document.getElementById('llmProvider').value;
+    const router=visibleLlm==='openrouter',draft=providerDrafts.llm[visibleLlm]||{};
+    document.getElementById('apiKey').value=draft.key||'';
+    document.getElementById('apiKey').type='password';
+    document.getElementById('llmKeyLabel').textContent=router?'OpenRouter API Key':'DeepSeek API Key';
+    document.getElementById('deepseekModelRow').hidden=router;
+    document.getElementById('openrouterModelRow').hidden=!router;
+    document.getElementById(router?'openrouterModel':'modelSelect').value=draft.model||(router?'':'deepseek-chat');
+  }else{
+    visibleJev=document.getElementById('jevProvider').value;
+    const router=visibleJev==='openrouter',draft=providerDrafts.jev[visibleJev]||{};
+    document.getElementById('jevApiKey').value=draft.key||'';
+    document.getElementById('jevApiKey').type='password';document.getElementById('btnToggleJevKey').textContent='显示';
+    document.getElementById('jevApiKey').placeholder=router?'填写你的 OpenRouter API Key':'填写你的 TypeSafe API Key';
+    document.getElementById('jevKeyLabel').textContent=router?'OpenRouter API Key':'TypeSafe 官方 API Key';
+    document.getElementById('jevModelRow').hidden=!router;
+    document.getElementById('jevModel').value=draft.model||'typesafe/jev-1.13';
+  }
+}
+function busy(kind,value){
+  const ids=kind==='jev'?['jevProvider','jevApiKey','jevModel','btnSaveJev','btnRemoveJev']:['llmProvider','apiKey','modelSelect','openrouterModel','btnSaveKey','btnTestKey'];
+  ids.forEach(id=>document.getElementById(id).disabled=value);
+}
+async function configureLlm(test){
+  const provider=document.getElementById('llmProvider').value;
+  const key=document.getElementById('apiKey').value.trim(),model=document.getElementById(provider==='openrouter'?'openrouterModel':'modelSelect').value.trim();
+  if(!key||!model){showTestResult('请填写 API Key 和模型 ID','error');return;}
+  rememberProvider('llm');busy('llm',true);showTestResult(test?'正在测试所选模型…':'正在保存…','success');
+  try{
+    const result=await chrome.runtime.sendMessage({type:test?'TEST_LLM_CONFIG':'SAVE_LLM_CONFIG',provider,key,model});
+    if(result?.status!=='success')throw Error(result?.error||'后台未返回结果');
+    showTestResult(test?'连接与 JSON 输出测试通过；如需启用请保存配置':'已保存：'+(provider==='openrouter'?'OpenRouter':'DeepSeek')+' / '+model,'success');
+  }catch(error){showTestResult(error.message,'error');}finally{busy('llm',false);}
+}
 
 document.addEventListener('DOMContentLoaded', () => {
   loadSettings();
@@ -12,20 +54,21 @@ async function loadSettings() {
     'deepseek_model',
     'auto_capture',
     'notify_on_capture',
-    'intake_tags','jev_api_key','jev_verified','jev_status'
+    'intake_tags','jev_api_key','jev_verified','jev_status','jev_provider','jev_openrouter_api_key','jev_openrouter_model',
+    'llm_provider','openrouter_api_key','openrouter_model'
   ]);
 
-  if (result.deepseek_api_key) {
-    document.getElementById('apiKey').value = result.deepseek_api_key;
-  }
-  if (result.deepseek_model) {
-    document.getElementById('modelSelect').value = result.deepseek_model;
-  }
+  providerDrafts.llm.deepseek={key:result.deepseek_api_key||'',model:result.deepseek_model||'deepseek-chat'};
+  providerDrafts.llm.openrouter={key:result.openrouter_api_key||'',model:result.openrouter_model||''};
+  providerDrafts.jev.typesafe={key:result.jev_api_key||''};
+  providerDrafts.jev.openrouter={key:result.jev_openrouter_api_key||'',model:result.jev_openrouter_model||'typesafe/jev-1.13'};
+  document.getElementById('llmProvider').value=result.llm_provider||'deepseek';
+  document.getElementById('jevProvider').value=result.jev_provider||'typesafe';
+  renderProvider('llm');renderProvider('jev');
   document.getElementById('autoCapture').checked = result.auto_capture !== false;
   document.getElementById('notifyOnCapture').checked = result.notify_on_capture !== false;
   document.getElementById('intakeTags').value = IntakePolicy.normalize(result.intake_tags).join('，');
-  document.getElementById('jevApiKey').value=result.jev_api_key||'';
-  showJevStatus(result.jev_status?.message||(result.jev_verified?'Jev 已启用':'未配置 Jev，当前使用 DeepSeek 审核'),result.jev_status?.state==='fallback');
+  showJevStatus(result.jev_status?.message||(result.jev_verified?'Jev 已启用':'未配置 Jev，当前使用笔记模型审核'),result.jev_status?.state==='fallback');
 }
 
 async function loadTreeStats() {
@@ -39,18 +82,20 @@ async function loadTreeStats() {
 }
 
 function setupEventListeners() {
+  document.getElementById('llmProvider').addEventListener('change',()=>{rememberProvider('llm');renderProvider('llm');showTestResult('当前仅切换填写区域；保存后才改变实际调用渠道','success');});
+  document.getElementById('jevProvider').addEventListener('change',()=>{rememberProvider('jev');renderProvider('jev');showJevStatus('当前仅切换填写区域；验证并保存后生效');});
   document.getElementById('btnToggleJevKey').addEventListener('click',()=>{const input=document.getElementById('jevApiKey');input.type=input.type==='password'?'text':'password';document.getElementById('btnToggleJevKey').textContent=input.type==='password'?'显示':'隐藏';});
   document.getElementById('btnSaveJev').addEventListener('click',async()=>{
-    const button=document.getElementById('btnSaveJev'),remove=document.getElementById('btnRemoveJev');button.disabled=true;remove.disabled=true;showJevStatus('正在验证 Jev…');
-    try{const response=await chrome.runtime.sendMessage({type:'SAVE_JEV_KEY',key:document.getElementById('jevApiKey').value.trim()});if(response?.error||response?.status!=='success')throw Error(response?.error||'后台没有返回验证结果');showJevStatus('验证成功：已启用 Jev 收录预审');}
+    rememberProvider('jev');busy('jev',true);showJevStatus('正在验证 Jev…');
+    try{const response=await chrome.runtime.sendMessage({type:'SAVE_JEV_KEY',key:document.getElementById('jevApiKey').value.trim(),provider:document.getElementById('jevProvider').value,model:document.getElementById('jevModel').value.trim()});if(response?.error||response?.status!=='success')throw Error(response?.error||'后台没有返回验证结果');showJevStatus('验证成功：已启用 Jev 收录预审');}
     catch(error){showJevStatus(error.message+'；未更改已保存的配置',true);}
-    finally{button.disabled=false;remove.disabled=false;}
+    finally{busy('jev',false);}
   });
   document.getElementById('btnRemoveJev').addEventListener('click',async()=>{
-    try{const response=await chrome.runtime.sendMessage({type:'REMOVE_JEV_KEY'});if(response?.error)throw Error(response.error);document.getElementById('jevApiKey').value='';showJevStatus('已移除 Jev 密钥，使用 DeepSeek 审核');}
-    catch(error){showJevStatus(error.message,true);}
+    busy('jev',true);try{const response=await chrome.runtime.sendMessage({type:'REMOVE_JEV_KEY'});if(response?.error)throw Error(response.error);providerDrafts.jev={};document.getElementById('jevApiKey').value='';showJevStatus('已移除 Jev 密钥，使用笔记模型审核');}
+    catch(error){showJevStatus(error.message,true);}finally{busy('jev',false);}
   });
-  chrome.storage.onChanged.addListener((changes,area)=>{if(area==='local'&&changes.jev_status){const status=changes.jev_status.newValue;showJevStatus(status?.message||'未配置 Jev，当前使用 DeepSeek 审核',status?.state==='fallback');}});
+  chrome.storage.onChanged.addListener((changes,area)=>{if(area==='local'&&changes.jev_status){const status=changes.jev_status.newValue;showJevStatus(status?.message||'未配置 Jev，当前使用笔记模型审核',status?.state==='fallback');}});
   document.getElementById('btnSaveIntake').addEventListener('click',async()=>{
     const result=document.getElementById('intakeResult');
     try{
@@ -72,52 +117,8 @@ function setupEventListeners() {
     input.type = input.type === 'password' ? 'text' : 'password';
   });
 
-  // Save API key
-  document.getElementById('btnSaveKey').addEventListener('click', async () => {
-    const apiKey = document.getElementById('apiKey').value.trim();
-    const model = document.getElementById('modelSelect').value;
-
-    if (!apiKey) {
-      showTestResult('请输入 API Key', 'error');
-      return;
-    }
-
-    await chrome.storage.local.set({
-      deepseek_api_key: apiKey,
-      deepseek_model: model
-    });
-    showTestResult('✅ API Key 已保存', 'success');
-  });
-
-  // Test API connection
-  document.getElementById('btnTestKey').addEventListener('click', async () => {
-    const apiKey = document.getElementById('apiKey').value.trim();
-    if (!apiKey) {
-      showTestResult('请先输入 API Key', 'error');
-      return;
-    }
-
-    showTestResult('⏳ 测试中...', 'success');
-
-    try {
-      const response = await fetch('https://api.deepseek.com/v1/models', {
-        headers: { 'Authorization': `Bearer ${apiKey}` }
-      });
-
-      if (response.ok) {
-        const data = await response.json();
-        showTestResult(
-          `✅ 连接成功！可用模型: ${data.data?.length || 'N/A'} 个`,
-          'success'
-        );
-      } else {
-        const err = await response.text();
-        showTestResult(`❌ 连接失败: ${response.status}`, 'error');
-      }
-    } catch (err) {
-      showTestResult(`❌ 网络错误: ${err.message}`, 'error');
-    }
-  });
+  document.getElementById('btnSaveKey').addEventListener('click',()=>configureLlm(false));
+  document.getElementById('btnTestKey').addEventListener('click',()=>configureLlm(true));
 
   // View tree
   document.getElementById('btnViewTree').addEventListener('click', () => {

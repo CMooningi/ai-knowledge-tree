@@ -162,7 +162,7 @@
     schedule();
   }
   chrome.storage.onChanged.addListener((changes,area)=>{
-    if(area==='local'&&(changes.intake_tags||changes.jev_api_key||changes.jev_verified||changes.auto_capture)&&contextAvailable())sampleActivity(true);
+    if(area==='local'&&(changes.intake_tags||changes.jev_api_key||changes.jev_verified||changes.jev_provider||changes.jev_openrouter_api_key||changes.jev_openrouter_model||changes.auto_capture)&&contextAvailable())sampleActivity(true);
   });
   if (document.body) start();
   else window.addEventListener('DOMContentLoaded', start, { once: true });

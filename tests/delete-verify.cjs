@@ -3,7 +3,7 @@ const md='# Tree\n## A\n### Repeated\nfirst note\n### Repeated\nsecond note\n###
 const store={knowledge_tree_md:md};let listener;
 const ctx=vm.createContext({URL,console,chrome:{downloads:{onChanged:{addListener(){}}},runtime:{onMessage:{addListener(fn){listener=fn;}},onInstalled:{addListener(){}}},storage:{local:{async get(){return structuredClone(store);},async set(v){Object.assign(store,structuredClone(v));}}}}});
 ctx.importScripts=(...files)=>files.forEach(file=>vm.runInContext(fs.readFileSync(__dirname+'/../'+file,'utf8'),ctx));
-ctx.chrome.alarms={async create(){},async clear(){},onAlarm:{addListener(){}}};ctx.chrome.runtime.onStartup={addListener(){}};ctx.chrome.storage.onChanged={addListener(){}};vm.runInContext(fs.readFileSync(__dirname+'/../background.js','utf8'),ctx);
+ctx.chrome.alarms={async create(){},async clear(){},onAlarm:{addListener(){}}};ctx.chrome.runtime.onStartup={addListener(){}};ctx.chrome.storage.onChanged={addListener(){}};Object.assign(ctx,{AbortController,setTimeout,clearTimeout});ctx.console={...console,log(){},warn(){},groupCollapsed(){},groupEnd(){}};vm.runInContext(fs.readFileSync(__dirname+'/../background.js','utf8'),ctx);
 const M=ctx.KnowledgeModel,A=vm.runInContext('TreeActions',ctx);
 const tree=M.parse(md),repeated=tree.nodes.filter(n=>n.title==='Repeated');
 const send=payload=>new Promise(resolve=>listener({type:'DELETE_NODE',payload},{},resolve));

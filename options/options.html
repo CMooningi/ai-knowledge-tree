@@ -27,11 +27,20 @@
 
     <section class="setting-group">
       <h2>Jev 收录预审（可选）</h2>
-      <p class="desc">验证成功后，先由 Jev 判断是否需要收录，再由 DeepSeek 整理笔记。未配置或暂时不可用时自动使用 DeepSeek。</p>
+      <p class="desc">验证成功后，先由 Jev 判断是否需要收录，再由下方配置的笔记模型整理。未配置或暂时不可用时自动由笔记模型审核。</p>
       <div class="form-item">
-        <label for="jevApiKey">TypeSafe 官方 API Key</label>
+        <label for="jevProvider">调用渠道</label>
+        <select id="jevProvider"><option value="typesafe">TypeSafe 官方</option><option value="openrouter">OpenRouter</option></select>
+      </div>
+      <div class="form-item" id="jevModelRow" hidden>
+        <label for="jevModel">Jev 模型 ID</label>
+        <input type="text" id="jevModel" value="typesafe/jev-1.13" placeholder="typesafe/jev-1.13">
+        <span class="hint">可使用 typesafe/jev-1.13 或 ~typesafe/jev-latest。这里仅用于决策，不用于生成笔记。</span>
+      </div>
+      <div class="form-item">
+        <label for="jevApiKey" id="jevKeyLabel">TypeSafe 官方 API Key</label>
         <div class="input-row"><input type="password" id="jevApiKey" autocomplete="off" placeholder="填写你的 TypeSafe API Key"><button class="btn-icon" id="btnToggleJevKey" aria-label="显示或隐藏 Jev 密钥">显示</button></div>
-        <span class="hint">在 <a href="https://console.typesafe.ai" target="_blank" rel="noopener noreferrer">TypeSafe 官方控制台</a> 获取；验证会发送一次简短测试请求。</span>
+        <span class="hint" id="jevProviderHint">验证会向所选渠道发送一次简短测试请求，可能产生少量费用。渠道切换后需验证并保存。</span>
       </div>
       <button class="btn btn-primary" id="btnSaveJev">验证并保存</button>
       <button class="btn btn-secondary" id="btnRemoveJev">移除 Jev 密钥</button>
@@ -39,19 +48,23 @@
     </section>
 
     <section class="setting-group">
-      <h2>DeepSeek API 配置</h2>
+      <h2>笔记整理模型</h2>
+      <div class="form-item">
+        <label for="llmProvider">调用渠道</label>
+        <select id="llmProvider"><option value="deepseek">DeepSeek 官方</option><option value="openrouter">OpenRouter</option></select>
+      </div>
       <p class="desc">用于分析对话内容、归类知识点、去重。</p>
 
       <div class="form-item">
-        <label for="apiKey">API Key</label>
+        <label for="apiKey" id="llmKeyLabel">DeepSeek API Key</label>
         <div class="input-row">
           <input type="password" id="apiKey" placeholder="sk-xxxxxxxxxxxxxxxx">
           <button class="btn-icon" id="btnToggleKey" title="显示/隐藏">👁️</button>
         </div>
-        <span class="hint">在 <a href="https://platform.deepseek.com/api_keys" target="_blank">platform.deepseek.com</a> 获取</span>
+        <span class="hint">密钥在本机保存。<a href="https://platform.deepseek.com/api_keys" target="_blank" rel="noopener noreferrer">获取 DeepSeek Key</a> · <a href="https://openrouter.ai/settings/keys" target="_blank" rel="noopener noreferrer">获取 OpenRouter Key</a></span>
       </div>
 
-      <div class="form-item">
+      <div class="form-item" id="deepseekModelRow">
         <label for="modelSelect">模型</label>
         <select id="modelSelect">
           <option value="deepseek-chat">DeepSeek Chat (推荐)</option>
@@ -59,6 +72,12 @@
         </select>
       </div>
 
+      <div class="form-item" id="openrouterModelRow" hidden>
+        <label for="openrouterModel">OpenRouter 模型 ID</label>
+        <input type="text" id="openrouterModel" placeholder="从 OpenRouter 模型页面复制完整 ID">
+        <span class="hint">选择支持 JSON 输出的文本模型。Jev 决策模型应在上方配置。</span>
+      </div>
+      <p class="hint">测试连接会向当前所选模型发送一个简短 JSON 请求，可能产生少量费用；测试成功后仍需点击保存配置。</p>
       <button class="btn btn-primary" id="btnSaveKey">💾 保存配置</button>
       <button class="btn btn-secondary" id="btnTestKey">🔍 测试连接</button>
       <div class="test-result" id="testResult"></div>
@@ -92,7 +111,7 @@
         </label>
       </div>
 
-      <p class="hint">输入、新消息或 AI 正在回答都会重新计时。页面需要保持打开；后台标签页可能稍晚执行。手动抓取无需等待。</p>
+      <p class="hint">输入、新消息或 AI 正在回答都会重新计时。完整回答已缓存后，关闭标签页也能继续处理；浏览器关闭后下次启动恢复。手动抓取无需等待。</p>
 
       <div class="form-item">
         <label class="toggle-label">
@@ -105,7 +124,7 @@
     </section>
 
     <footer>
-      <p>AI 知识树 v1.2.0</p>
+      <p>AI 知识树 v1.3.0</p>
     </footer>
   </div>
 

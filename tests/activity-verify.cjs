@@ -7,7 +7,7 @@ const ctx=vm.createContext({URL,TextEncoder,crypto:webcrypto,structuredClone,con
  downloads:{onChanged:{addListener(fn){downloadListener=fn;}},async download(){if(cancel)throw Error('cancelled');downloads.set(++downloadId,{id:downloadId,state:'in_progress'});return downloadId;},async search({id}){return downloads.has(id)?[downloads.get(id)]:[];}}},
 });
 ctx.importScripts=(...names)=>names.forEach(name=>vm.runInContext(fs.readFileSync(__dirname+'/../'+name,'utf8'),ctx));
-ctx.chrome.alarms={async create(){},async clear(){},onAlarm:{addListener(){}}};ctx.chrome.runtime.onStartup={addListener(){}};ctx.chrome.storage.onChanged={addListener(){}};vm.runInContext(fs.readFileSync(__dirname+'/../background.js','utf8'),ctx);
+ctx.chrome.alarms={async create(){},async clear(){},onAlarm:{addListener(){}}};ctx.chrome.runtime.onStartup={addListener(){}};ctx.chrome.storage.onChanged={addListener(){}};Object.assign(ctx,{AbortController,setTimeout,clearTimeout});ctx.console={...console,log(){},warn(){},groupCollapsed(){},groupEnd(){}};vm.runInContext(fs.readFileSync(__dirname+'/../background.js','utf8'),ctx);
 const A=ctx.NoteActivity,T=vm.runInContext('Taxonomy',ctx),M=ctx.KnowledgeModel;
 const send=msg=>new Promise(resolve=>listener(msg,{},resolve));
 const now=new Date(2026,8,23,12).getTime();
