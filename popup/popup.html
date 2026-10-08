@@ -10,12 +10,15 @@
   <div class="popup-container">
     <header>
       <h1>🌳 AI 知识树</h1>
-      <span class="version">v1.0</span>
+      <span class="version" id="versionText"></span>
     </header>
 
     <div class="status-bar" id="statusBar">
       <span class="status-dot" id="statusDot"></span>
-      <span id="statusText">就绪</span>
+      <div class="status-content">
+        <span id="statusText">读取状态中…</span>
+        <small id="statusDetail" hidden></small>
+      </div>
     </div>
 
     <div class="info-cards">

@@ -120,8 +120,13 @@ const PendingCaptures = (() => {
     });
   }
   async function status() {
-    const data=await chrome.storage.local.get([key,'auto_capture','pending_capture_error']), records=Object.values(data[key]||{});
-    return {pendingCount:records.length,pendingPaused:data.auto_capture===false,pendingError:data.pending_capture_error||records.find(r=>r.error)?.error||''};
+    const data=await chrome.storage.local.get([key,'auto_capture','pending_capture_error']), entries=Object.entries(data[key]||{});
+    const paused=data.auto_capture===false, processing=entries.filter(([id])=>active.has(id)).length;
+    const waiting=entries.filter(([id])=>!active.has(id)).map(([,r])=>({record:r,due:Math.max(r.lastActivity+idleMs,r.retryAt||0)})).sort((a,b)=>a.due-b.due);
+    const next=waiting[0], error=data.pending_capture_error||next?.record.error||'';
+    const state=entries.length?(paused?'paused':processing?'processing':next.record.error?'retry':next.due<=Date.now()?'ready':'waiting'):(error?'cache-error':'idle');
+    return {pendingCount:entries.length,pendingPaused:paused,pendingError:error,pendingState:state,
+      pendingProcessing:processing,pendingNextAt:next?.due||0,pendingRetryCount:next?.record.attempts||0};
   }
   async function clear() {return serial(async()=>{await chrome.storage.local.remove([key,'pending_capture_error']);await chrome.alarms.clear(alarm);});}
   function init(run) {

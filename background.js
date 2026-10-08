@@ -1,4 +1,6 @@
 // Capture, classification and automatic reorganization share a serialized write queue.
+// Report the executing code version, even when a new popup meets a cached worker.
+const BACKGROUND_VERSION = '1.3.2';
 importScripts('dev-log.js', 'model-config.js', 'model-transport.js', 'preview/model.js', 'taxonomy.js', 'preview/editor-model.js', 'tree-actions.js', 'capture-state.js', 'pending-captures.js', 'note-activity.js', 'intake-policy.js', 'jev-client.js', 'deepseek-client.js', 'knowledge-tree.js');
 let captureQueue=Promise.resolve();
 function enqueue(task,sendResponse){
@@ -166,7 +168,7 @@ async function intakeScope(settings){
 }
 async function getStatus(){
   const result=await chrome.storage.local.get('capture_status'),tree=await getTree();
-  return {...(result.capture_status||{}),...await PendingCaptures.status(),treeSize:tree.length,treeLines:tree.split('\n').length};
+  return {...(result.capture_status||{}),...await PendingCaptures.status(),backgroundVersion:BACKGROUND_VERSION,treeSize:tree.length,treeLines:tree.split('\n').length};
 }
 chrome.runtime.onInstalled.addListener(()=>initTree().catch(error=>console.warn('[知识树] 初始化失败:',error.message)));
 

@@ -1,18 +1,25 @@
 // AI Knowledge Tree — Popup Script
+const POPUP_VERSION = '1.3.2';
+let latestStatus, statusLoading = false, manualBusy = false;
 
 document.addEventListener('DOMContentLoaded', () => {
   loadStatus();
   setupButtons();
+  setInterval(loadStatus, 5000);
+  setInterval(() => { if(latestStatus&&!manualBusy)updateUI(latestStatus); }, 1000);
 });
 
 async function loadStatus() {
+  if(statusLoading||manualBusy)return;
+  statusLoading=true;
   try {
     const status = await chrome.runtime.sendMessage({ type: 'GET_STATUS' });
-    updateUI(status);
+    if(!status||status.error)throw Error(status?.error||'后台未返回状态');
+    if(!manualBusy){latestStatus=status;updateUI(status);}
   } catch (err) {
-    document.getElementById('statusText').textContent = '请刷新 AI 页面';
-    document.getElementById('statusDot').classList.add('error');
-  }
+    if(!manualBusy){latestStatus=null;document.getElementById('statusText').textContent = '无法读取后台状态，请重新加载扩展';
+    document.getElementById('statusDot').classList.add('error');}
+  } finally {statusLoading=false;}
 }
 
 function updateUI(status) {
@@ -31,14 +38,31 @@ function updateUI(status) {
   // Update status dot
   const dot = document.getElementById('statusDot');
   const text = document.getElementById('statusText');
-  if(status.pendingError){
-    dot.classList.add('error');text.textContent='待处理：'+status.pendingError;
+  const detail = document.getElementById('statusDetail');
+  const oldWorker=status.backgroundVersion!==POPUP_VERSION;
+  document.getElementById('versionText').textContent=status.backgroundVersion?'v'+status.backgroundVersion:'后台待更新';
+  dot.classList.remove('error','active');
+  const seconds=Math.max(0,Math.ceil(((status.pendingNextAt||0)-Date.now())/1000));
+  const remaining=`${Math.floor(seconds/60)}分${String(seconds%60).padStart(2,'0')}秒`;
+  const retryTime=status.pendingNextAt?new Date(status.pendingNextAt).toLocaleTimeString('zh-CN',{hour:'2-digit',minute:'2-digit'}):'';
+  if(status.pendingState==='paused'||status.pendingPaused&&status.pendingCount){
+    text.textContent=`${status.pendingCount} 个对话已暂存，自动整理已关闭`;
+  }else if(status.pendingState==='processing'){
+    dot.classList.add('active');text.textContent=`${status.pendingProcessing} 个对话正在处理或排队，等待模型返回`;
+  }else if(status.pendingState==='retry'){
+    dot.classList.add('error');text.textContent=seconds?`处理失败 ${status.pendingRetryCount} 次，预计 ${retryTime} 重试（${remaining}）`:'重试时间已到，等待后台执行';
+  }else if(status.pendingError){
+    dot.classList.add('error');text.textContent=status.pendingState==='cache-error'?'对话缓存失败，请保持对话页面打开':'处理未完成，请查看下方错误';
   }else if(status.pendingCount){
-    text.textContent=`${status.pendingCount} 个对话${status.pendingPaused?'已暂存，自动整理已关闭':'已暂存，等待自动整理'}`;
+    text.textContent=seconds?`${status.pendingCount} 个对话已暂存，约 ${remaining} 后自动处理`:'空闲时间已满，等待后台执行';
   }else if (status.lastCapture && Date.now() - status.lastCapture < 60000) {
     dot.classList.add('active');
     text.textContent = '最近已抓取';
+  }else{
+    text.textContent='就绪，没有待处理对话';
   }
+  const details=[oldWorker?'后台尚未加载当前版本。请在扩展管理页点击重新加载，再刷新 AI 对话页面。':'',status.pendingError?'最近错误：'+status.pendingError:''];
+  detail.textContent=details.filter(Boolean).join('\n');detail.hidden=!detail.textContent;
 }
 
 function setupButtons() {
@@ -54,6 +78,10 @@ function setupButtons() {
     const btn = document.getElementById('btnCapture');
     btn.textContent = '⏳ 正在整理…';
     btn.disabled = true;
+    manualBusy = true;
+    latestStatus = null;
+    document.getElementById('statusDot').classList.remove('error');
+    document.getElementById('statusDetail').hidden = true;
     document.getElementById('statusText').textContent = '正在处理当前对话，无需等待五分钟';
 
     try {
@@ -68,7 +96,7 @@ function setupButtons() {
 
       if (response.status === 'success') {
         showToast(`✅ 新增 ${response.newPoints} 篇笔记` + (response.updatedNotes ? `，更新 ${response.updatedNotes} 篇旧笔记` : '') + (response.reorganizedNotes ? `，自动归类 ${response.reorganizedNotes} 条旧笔记` : ''));
-        loadStatus();
+        manualBusy=false;await loadStatus();
       } else if (response.status === 'skipped') {
         document.getElementById('statusText').textContent = response.reason;
         showToast(`⏭️ ${response.reason}`);
@@ -82,6 +110,7 @@ function setupButtons() {
         ? '❌ 请先重新加载扩展，再刷新支持的 AI 聊天页面'
         : `❌ 抓取失败: ${err.message}`);
     } finally {
+      manualBusy=false;
       btn.textContent = '📸 立即抓取';
       btn.disabled = false;
     }

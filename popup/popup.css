@@ -64,6 +64,10 @@ header h1 {
   background: #f44336;
 }
 
+.status-content { min-width: 0; overflow-wrap: anywhere; }
+#statusDetail { display: block; margin-top: 5px; color: #777; line-height: 1.5; }
+#statusDetail[hidden] { display: none; }
+
 @keyframes pulse {
   0%, 100% { opacity: 1; }
   50% { opacity: 0.4; }
