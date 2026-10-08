@@ -52,14 +52,16 @@ function setupButtons() {
 
   document.getElementById('btnCapture').addEventListener('click', async () => {
     const btn = document.getElementById('btnCapture');
-    btn.textContent = '⏳ 抓取中...';
+    btn.textContent = '⏳ 正在整理…';
     btn.disabled = true;
+    document.getElementById('statusText').textContent = '正在处理当前对话，无需等待五分钟';
 
     try {
       const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
       const response = await chrome.tabs.sendMessage(tab.id, { type: 'MANUAL_CAPTURE' });
 
       if (!response) {
+        document.getElementById('statusText').textContent = '当前页面未检测到 AI 对话';
         showToast('当前页面未检测到 AI 对话');
         return;
       }
@@ -68,16 +70,19 @@ function setupButtons() {
         showToast(`✅ 新增 ${response.newPoints} 篇笔记` + (response.updatedNotes ? `，更新 ${response.updatedNotes} 篇旧笔记` : '') + (response.reorganizedNotes ? `，自动归类 ${response.reorganizedNotes} 条旧笔记` : ''));
         loadStatus();
       } else if (response.status === 'skipped') {
+        document.getElementById('statusText').textContent = response.reason;
         showToast(`⏭️ ${response.reason}`);
       } else {
+        document.getElementById('statusText').textContent = '抓取未完成：'+(response.error || '未知错误');
         showToast(`❌ ${response.error || '未知错误'}`);
       }
     } catch (err) {
+      document.getElementById('statusText').textContent = '抓取未完成，请刷新 AI 页面后重试';
       showToast(/Receiving end does not exist|Could not establish connection/i.test(err.message)
         ? '❌ 请先重新加载扩展，再刷新支持的 AI 聊天页面'
         : `❌ 抓取失败: ${err.message}`);
     } finally {
-      btn.textContent = '📸 手动抓取';
+      btn.textContent = '📸 立即抓取';
       btn.disabled = false;
     }
   });

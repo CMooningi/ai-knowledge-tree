@@ -7,9 +7,10 @@ const Taxonomy = {
     return title;
   },
   path(value, technology) {
-    if (!Array.isArray(value) || value.length < 1 || value.length > 4) throw new Error('分类路径应为 1–4 层，另保留一层知识点');
+    const invalid = message => Object.assign(new Error(message), {code:'INVALID_TAXONOMY_PATH'});
+    if (!Array.isArray(value) || value.length < 1 || value.length > 4) throw invalid('分类路径应为 1–4 层，另保留一层知识点');
     const path = value.map(name => this.name(name));
-    if (technology && !path.some(name => name.toLowerCase() === technology.toLowerCase())) throw new Error('LLM 分类遗漏了主要技术层，本次未保存');
+    if (technology && !path.some(name => name.toLowerCase() === technology.toLowerCase())) throw invalid('分类路径缺少独立的主要技术层：'+technology);
     return path;
   },
   snapshot(md) {
