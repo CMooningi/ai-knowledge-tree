@@ -1,6 +1,6 @@
 // Capture, classification and automatic reorganization share a serialized write queue.
 // Report the executing code version, even when a new popup meets a cached worker.
-const BACKGROUND_VERSION = '1.3.3';
+const BACKGROUND_VERSION = '1.4.0';
 importScripts('dev-log.js', 'model-config.js', 'model-transport.js', 'preview/model.js', 'taxonomy.js', 'preview/editor-model.js', 'tree-actions.js', 'capture-state.js', 'pending-captures.js', 'note-activity.js', 'intake-policy.js', 'jev-client.js', 'deepseek-client.js', 'knowledge-tree.js');
 let captureQueue=Promise.resolve();
 function enqueue(task,sendResponse){
@@ -130,7 +130,8 @@ async function processCapture(payload,ensureCurrent,commit,trace){
   }
   const related=Taxonomy.related(snapshot,classification);
   trace.step('04 总结与去重 → 新增正文和相关旧笔记',{relatedNotes:related.length});
-  const sections=await extractKnowledge(conversation,related.filter(note=>Taxonomy.sameSource(note.content,payload.url)),related,tags,trace);
+  const comparisons=related.map(note=>({...note,mergeable:Taxonomy.canMerge(note,classification.technology,payload.url)}));
+  const sections=await extractKnowledge(conversation,related.filter(note=>Taxonomy.sameSource(note.content,payload.url)),comparisons,tags,trace,classification);
   await checkPolicy();
   const revisited=(sections.revisited||[]).map(id=>snapshot.records.find(r=>r.id===id)?.node.id).filter(Boolean);
   const activityData=await chrome.storage.local.get(NoteActivity.key);
@@ -145,19 +146,19 @@ async function processCapture(payload,ensureCurrent,commit,trace){
   const result=Taxonomy.apply(currentTree,classification,sections,related,plan,payload.url);
   await checkPolicy();
   const activity=NoteActivity.evolve(previousActivity,result,revisited);
-  if(!result.added&&!result.moved&&!result.updated){
+  if(!result.added&&!result.moved&&!result.updated&&!result.reordered){
     await commit(()=>chrome.storage.local.set({...CaptureState.update(checkpoint),[NoteActivity.key]:activity}));
     return {status:'skipped',reason:'无新增知识或需要调整的目录'};
   }
   const previous=await chrome.storage.local.get('capture_status');
   const hierarchy=(result.paths[0]||classification.hierarchy).join(' > ');
-  trace.step('06 校验完成 → 保存知识树',{added:result.added,updated:result.updated,moved:result.moved,paths:result.paths});
+  trace.step('06 校验完成 → 保存知识树',{added:result.added,updated:result.updated,moved:result.moved,reordered:result.reordered,paths:result.paths});
   await commit(()=>commitLearning(currentTree,result,{
     lastCapture:Date.now(),lastPlatform:payload.platform,lastTitle:payload.title,lastHierarchy:hierarchy,
-    newPoints:result.added,updatedNotes:result.updated,reorganizedNotes:result.moved,reorganizationSummary:result.summary,
+    newPoints:result.added,updatedNotes:result.updated,reorganizedNotes:result.moved,reorderedDirectories:result.reordered,reorganizationSummary:result.summary,
     totalConversations:(previous.capture_status?.totalConversations||0)+1
   },{...CaptureState.update(checkpoint),[NoteActivity.key]:activity}));
-  return {status:'success',hierarchy,newPoints:result.added,updatedNotes:result.updated,reorganizedNotes:result.moved,keywords:classification.keywords||[]};
+  return {status:'success',hierarchy,newPoints:result.added,updatedNotes:result.updated,reorganizedNotes:result.moved,reorderedDirectories:result.reordered,keywords:classification.keywords||[]};
 }
 async function intakeScope(settings){
   const base=IntakePolicy.scope(IntakePolicy.normalize(settings.intake_tags));

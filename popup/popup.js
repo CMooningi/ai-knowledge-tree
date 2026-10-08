@@ -1,5 +1,5 @@
 // AI Knowledge Tree — Popup Script
-const POPUP_VERSION = '1.3.3';
+const POPUP_VERSION = '1.4.0';
 let latestStatus, statusLoading = false, manualBusy = false;
 
 document.addEventListener('DOMContentLoaded', () => {
