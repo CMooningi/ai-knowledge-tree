@@ -1,6 +1,6 @@
 // Capture, classification and automatic reorganization share a serialized write queue.
 // Report the executing code version, even when a new popup meets a cached worker.
-const BACKGROUND_VERSION = '1.3.2';
+const BACKGROUND_VERSION = '1.3.3';
 importScripts('dev-log.js', 'model-config.js', 'model-transport.js', 'preview/model.js', 'taxonomy.js', 'preview/editor-model.js', 'tree-actions.js', 'capture-state.js', 'pending-captures.js', 'note-activity.js', 'intake-policy.js', 'jev-client.js', 'deepseek-client.js', 'knowledge-tree.js');
 let captureQueue=Promise.resolve();
 function enqueue(task,sendResponse){

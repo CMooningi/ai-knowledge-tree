@@ -3,8 +3,35 @@ const M = KnowledgeModel;
 let model, markdown='', selected, activeAnchor='', expanded=new Set(), saved={}, saveTimer, searchTimer, frame;
 let anchors=[], anchorMap=new Map(), outlines=new Map(), navButtons=new Map(), navRows=new Map();
 let viewNode, readingMode=false, locations={};
-let noteActivity={}, recentOnly=false, readingTimer, readingKey='';
+let noteActivity={}, recentOpen=false, readingTimer, readingKey='';
 function recentIds(){return new Set(NoteActivity.recent(noteActivity).map(([id])=>id));}
+function drawRecent(){
+  const nodes=NoteActivity.recent(noteActivity).map(([id])=>model.nodes.find(n=>n.id===id)).filter(Boolean);
+  const control=$('recent-control'),button=$('recent-updates'),panel=$('recent-panel'),list=$('recent-list');
+  control.hidden=!nodes.length;if(!nodes.length)recentOpen=false;
+  button.textContent=`最近更新 · ${nodes.length} ${recentOpen?'⌃':'⌄'}`;
+  button.setAttribute('aria-expanded',String(recentOpen));panel.hidden=!recentOpen;
+  // Rebuild only when titles or paths change so an open list keeps focus and scroll.
+  const signature=JSON.stringify(nodes.map(node=>[node.id,node.title]));
+  if(list.dataset.signature===signature)return;
+  list.dataset.signature=signature;list.replaceChildren();
+  for(const node of nodes){
+    const item=make('button',undefined,'recent-item');
+    item.append(make('strong',node.title),make('small',M.path(node).slice(1,-1).map(n=>n.title).join(' / ')));
+    item.title='在目录中定位：'+node.title;
+    item.onclick=()=>revealRecent(node.id);list.append(item);
+  }
+}
+function revealRecent(id){
+  const node=model.nodes.find(n=>n.id===id);if(!node)return;
+  recentOpen=false;$('search').value='';choose(node);
+  // Scroll only the outline, keeping the page and reader layout in place.
+  const row=navRows.get(node.id),tree=$('tree');if(!row)return;
+  const rect=row.getBoundingClientRect(),bounds=tree.getBoundingClientRect();
+  const reduce=window.matchMedia?.('(prefers-reduced-motion: reduce)').matches;
+  tree.scrollTo({top:Math.max(0,tree.scrollTop+rect.top-bounds.top-tree.clientHeight/2+rect.height/2),behavior:reduce?'auto':'smooth'});
+  row.classList.add('recent-target');navButtons.get(node.id)?.focus({preventScroll:true});
+}
 function badge(node,parent){
   if(node.children.length)return;
   const info=noteActivity[node.id];if(!info)return;
@@ -128,12 +155,7 @@ function drawTree(){
   if(!model)return;
   const tree=$('tree'),previousScroll=tree.scrollTop;tree.replaceChildren();navButtons=new Map();navRows=new Map();
   const query=$('search').value.trim();
-  const recent=recentIds();$('recent-updates').textContent=(recentOnly?'返回目录 · ':'最近更新 · ')+recent.size;$('recent-updates').setAttribute('aria-pressed',String(recentOnly));
-  if(recentOnly&&!query){
-    $('count').textContent='最近 7 天 · 最多 10 篇';
-    for(const [id] of NoteActivity.recent(noteActivity)){const node=model.nodes.find(n=>n.id===id);if(!node)continue;const button=make('button',undefined,'result');nodeTarget(button,node);const title=make('strong',node.title);badge(node,title);button.append(title,make('small',M.path(node).slice(1,-1).map(n=>n.title).join(' / ')));button.onclick=()=>choose(node);tree.append(button);}
-    if(!recent.size)tree.append(make('p','近期更新已读完。','empty'));return;
-  }
+  drawRecent();
   if(query){const results=M.search(model.nodes,query);$('count').textContent=results.length+' 个搜索结果';
     for(const node of results){const button=make('button',undefined,'result');nodeTarget(button,node);button.append(make('strong',node.title),make('small',M.path(node).slice(1).map(n=>n.title).join(' / ')));
       const text=node.body.filter(line=>![M.NOTE_START,M.NOTE_END].includes(line.trim())).join(' ').replace(/\s+/g,' '),index=text.toLowerCase().indexOf(query.toLowerCase());
@@ -209,7 +231,9 @@ $('resizer').onpointermove=e=>{if($('resizer').hasPointerCapture(e.pointerId))wi
 $('resizer').onpointerup=e=>{$('resizer').releasePointerCapture(e.pointerId);persist();};
 $('resizer').onkeydown=e=>{if(['ArrowLeft','ArrowRight'].includes(e.key)){e.preventDefault();width((saved.width||300)+(e.key==='ArrowLeft'?-20:20));persist();}};
 document.addEventListener('keydown',e=>{if((e.ctrlKey||e.metaKey)&&e.key.toLowerCase()==='k'){e.preventDefault();$('search').focus();}if(e.key==='Escape'&&document.activeElement===$('search')){$('search').value='';drawTree();}});
-$('recent-updates').onclick=()=>{recentOnly=!recentOnly;$('search').value='';drawTree();};
+$('recent-updates').onclick=()=>{recentOpen=!recentOpen;drawRecent();};
+document.addEventListener('click',e=>{if(recentOpen&&!$('recent-control').contains(e.target)){recentOpen=false;drawRecent();}});
+document.addEventListener('keydown',e=>{if(e.key==='Escape'&&recentOpen){recentOpen=false;drawRecent();$('recent-updates').focus();}});
 document.addEventListener('visibilitychange',()=>{if(document.visibilityState==='hidden'){clearTimeout(readingTimer);readingKey='';}else scheduleRead();});
 setInterval(()=>{if(model)drawTree();},60000);
 $('export').onclick=async()=>{try{const result=await chrome.runtime.sendMessage({type:'DOWNLOAD_TREE'});if(result?.error)throw Error(result.error);}catch(e){notify('导出未完成：'+e.message);}};

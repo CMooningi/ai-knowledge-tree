@@ -4,15 +4,16 @@ class El{
  constructor(tag='div'){this.tagName=tag.toUpperCase();this.children=[];this.style={setProperty(){}};this.dataset={};this.attributes={};this.listeners={};this.scrollTop=0;this.value='';this.className='';this._text='';this.id='';this.classList={add:(...v)=>{this.className=[...new Set([...this.className.split(' '),...v])].join(' ')},toggle:(v,on)=>{const names=new Set(this.className.split(' '));on?names.add(v):names.delete(v);this.className=[...names].join(' ')}};}
  set textContent(t){this._text=String(t);this.children=[]}get textContent(){return this._text+this.children.map(e=>e.textContent||'').join('')}
  append(...children){for(const c of children){c.parent=this;this.children.push(c)}}replaceChildren(...c){this.children=[];this._text='';this.append(...c)}
- setAttribute(k,v){this.attributes[k]=v}addEventListener(k,fn){this.listeners[k]=fn}focus(){}showModal(){this.open=true}close(){this.open=false}setRangeText(text,start,end){this.value=this.value.slice(0,start)+text+this.value.slice(end)}setPointerCapture(){}releasePointerCapture(){}hasPointerCapture(){return false}
- getBoundingClientRect(){if(this===reader)return {top:0};return {top:Math.max(0,walk(reader).indexOf(this))*40-reader.scrollTop};}
+ setAttribute(k,v){this.attributes[k]=v}addEventListener(k,fn){this.listeners[k]=fn}focus(){this.focused=true}contains(el){return walk(this).includes(el)}showModal(){this.open=true}close(){this.open=false}setRangeText(text,start,end){this.value=this.value.slice(0,start)+text+this.value.slice(end)}setPointerCapture(){}releasePointerCapture(){}hasPointerCapture(){return false}
+ get clientHeight(){return 160}
+ getBoundingClientRect(){if(this===reader||this.id==='tree')return {top:0,height:160};const tree=get('tree');if(tree?.contains(this))return {top:Math.max(0,walk(tree).indexOf(this))*40-tree.scrollTop,height:36};return {top:Math.max(0,walk(reader).indexOf(this))*40-reader.scrollTop,height:36};}
  scrollTo({top}){this.scrollTop=top;this.lastScroll=top}set innerHTML(_){throw Error('Raw HTML is forbidden')}
 }
 function walk(el){return [el,...(el.children||[]).flatMap(walk)]}
 function get(id){return walk(documentRoot).find(el=>el.id===id)||null}
 function create(id){const el=new El();el.id=id;return el}
 documentRoot=new El('body');reader=create('reader');documentRoot.append(reader);const article=new El('article');reader.append(article);article.append(create('title'),create('meta'),create('body'),create('children'));
-for(const id of ['note-editor','note-form','editor-heading','editor-path','editor-close','note-title','note-content','editor-count','tab-write','tab-preview','note-preview','format-tools','format-heading','format-star','format-code','editor-error','editor-save','editor-cancel','recent-updates','notice','crumbs','tree','count','search','collapse','resizer','export'])documentRoot.append(create(id));
+for(const id of ['note-editor','note-form','editor-heading','editor-path','editor-close','note-title','note-content','editor-count','tab-write','tab-preview','note-preview','format-tools','format-heading','format-star','format-code','editor-error','editor-save','editor-cancel','recent-updates','recent-control','recent-panel','recent-list','notice','crumbs','tree','count','search','collapse','resizer','export'])documentRoot.append(create(id));
 const md='# AI 知识树\n## AI\n### LlamaIndex\n#### VectorStoreIndex\n<!-- aitree-note:start -->\n## 定义\n组织向量检索关系。\n## 存储边界\n⭐ 索引与原文存储应分别理解。\n```js\nconst x = 1;\n```\n<!-- aitree-note:end -->\n> 📎 [查看对话原文](https://example.test)\n#### IngestionCache\n缓存转换结果。\n#### 旧格式主题\n##### 作用\n旧格式的正文内容。\n##### 流程\n旧格式的步骤内容。';
 const store={knowledge_tree_md:md};
 const ctx=vm.createContext({URL,console,document:{getElementById:get,createElement:t=>new El(t),createTextNode:text=>({textContent:text}),documentElement:new El('html'),addEventListener(){}},confirm:()=>false,window:{addEventListener(){},matchMedia:()=>({matches:true})},navigator:{clipboard:{async writeText(){}}},setInterval(){},setTimeout(fn){timers.set(++next,fn);return next},clearTimeout(id){timers.delete(id)},requestAnimationFrame(fn){raf=fn;return 1},chrome:{storage:{local:{async get(){return store},async set(v){Object.assign(store,v)}},onChanged:{addListener(fn){change=fn}}},runtime:{async sendMessage(msg){if(ctx.failSave)return {status:'error',error:'This note changed elsewhere'};const result=ctx.NoteEditor.apply(store.knowledge_tree_md,msg.payload);store.knowledge_tree_md=result.md;return {status:'success',...result};}},downloads:{async download(){}}}});
@@ -27,6 +28,16 @@ const run=code=>vm.runInContext(code,ctx);
  assert.ok(get('title'),'fixed title ID must survive anchor registration');
  assert.equal(get('title').textContent,'AI 知识树');assert.equal(run('readingMode'),false);
  assert.ok(get('children').textContent.includes('AI'));assert.equal(get('body').textContent.includes('组织向量'),false);
+ assert.equal(get('recent-control').hidden,true,'no empty recent section');
+ run(`noteActivity=Object.fromEntries(model.nodes.filter(n=>['VectorStoreIndex','IngestionCache'].includes(n.title)).map(n=>[n.id,{uid:n.id,updatedAt:Date.now(),readAt:0,days:[]}]));noteActivity.missing={updatedAt:Date.now()};drawTree()`);
+ assert.equal(get('recent-control').hidden,false);assert(get('recent-updates').textContent.includes('2'));assert.equal(get('recent-panel').hidden,true);
+ const treeBefore=[...get('tree').children];get('recent-updates').onclick();assert.equal(get('recent-panel').hidden,false);assert.equal(get('recent-list').children.length,2);assert.deepEqual(get('tree').children,treeBefore,'dropdown must not replace the outline');
+ const listBefore=[...get('recent-list').children];run('drawRecent()');assert.deepEqual(get('recent-list').children,listBefore,'refresh must preserve dropdown elements and focus');
+ get('search').value='缓存';get('recent-list').children.find(b=>b.textContent.includes('VectorStoreIndex')).onclick();
+ assert.equal(get('search').value,'');assert.equal(get('recent-panel').hidden,true);assert.equal(run('selected.title'),'VectorStoreIndex');assert(get('tree').scrollTop>0,'outline scrolls to the selected note');
+ assert(run('M.path(selected).every(n=>expanded.has(n.id))'));assert(run('navRows.get(selected.id).className.includes("active")'));assert(run('navButtons.get(selected.id).focused'));
+ assert(get('tree').textContent.includes('IngestionCache'),'keep the full tree available after jumping');
+ change({knowledge_note_activity:{newValue:{}}},'local');assert.equal(get('recent-control').hidden,true);assert.equal(get('recent-panel').hidden,true);
  run('choose(model.nodes.find(n=>n.title==="LlamaIndex"))');assert.equal(run('readingMode'),false);
  assert.equal(get('children').children[0].children.length,3);assert.equal(get('body').textContent.includes('缓存转换结果'),false);
  run('choose(model.nodes.find(n=>n.title==="VectorStoreIndex"))');assert.equal(run('readingMode'),true);
@@ -51,5 +62,5 @@ const run=code=>vm.runInContext(code,ctx);
  run('openNoteEditor(selected)');get('note-content').value='未保存的草稿';ctx.failSave=true;await get('note-form').onsubmit({preventDefault(){}});assert.equal(get('note-editor').open,true);assert.equal(get('note-content').value,'未保存的草稿');assert.ok(get('editor-error').textContent.includes('changed elsewhere'));assert.equal(get('note-content').readOnly,false);
  ctx.confirm=()=>true;get('editor-cancel').onclick();assert.equal(get('note-editor').open,false);
  change({knowledge_tree_md:{newValue:''}},'local');assert.ok(get('body').textContent.includes('还没有内容'));assert.equal(get('title').textContent,'全部知识');
- console.log('PASS fixed element IDs, upper-level cards, leaf-only reading, scoped legacy terminal topics, local outline scroll, unchanged document on anchor jump, per-topic restoration, search, live update and empty state.');
+ console.log('PASS fixed element IDs, recent dropdown count/hide/jump/full-tree preservation, upper-level cards, leaf-only reading, scoped legacy terminal topics, local outline scroll, unchanged document on anchor jump, per-topic restoration, search, live update and empty state.');
 })().catch(e=>{console.error(e);process.exitCode=1});

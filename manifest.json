@@ -1,7 +1,7 @@
 {
   "manifest_version": 3,
   "name": "AI 知识树",
-  "version": "1.3.2",
+  "version": "1.3.3",
   "description": "自动抓取 AI 学习对话，整理为层级知识树 Markdown 文件，新知识自动归类追加。",
   "icons": {
     "16": "icons/icon16.png",

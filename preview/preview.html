@@ -5,7 +5,10 @@
 <aside><div class="brand"><span>🌳</span><div>AI 知识树<small>让每一次学习，都留下脉络</small></div></div>
 <label class="search"><span>⌕</span><input id="search" type="search" placeholder="搜索标题或正文" aria-label="搜索知识树"></label>
 <div class="tools"><span id="count">正在加载…</span><button id="collapse">收起目录</button></div>
-<button id="recent-updates" aria-pressed="false" title="最近 7 天更新的最新 10 篇笔记中，尚未阅读的内容">最近更新 · 0</button>
+<div id="recent-control" hidden>
+<button id="recent-updates" aria-expanded="false" aria-controls="recent-panel" title="最近 7 天更新的最新 10 篇笔记中，尚未阅读的内容">最近更新</button>
+<div id="recent-panel" role="region" aria-label="最近更新的笔记" hidden><div id="recent-list"></div></div>
+</div>
 <nav id="tree" aria-label="笔记目录与小节大纲"></nav><footer>右键条目可删除 · 最末级可编辑</footer></aside>
 <div id="resizer" role="separator" tabindex="0" aria-label="调整目录宽度" aria-orientation="vertical" aria-valuemin="220" aria-valuemax="480" aria-valuenow="300"></div>
 <main><header><nav id="crumbs" aria-label="当前位置"></nav><div class="header-actions"><button id="export">导出 Markdown</button></div></header>
